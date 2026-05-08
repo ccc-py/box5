@@ -210,3 +210,11 @@ async def raw_file(path: str):
         media_types = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp"}
         return Response(content, media_type=media_types.get(ext, "application/octet-stream"))
     raise HTTPException(status_code=404, detail="File not found")
+
+@app.get("/editor", response_class=HTMLResponse)
+async def editor_page(request: Request, path: str = "./sync"):
+    sync_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sync")
+    return templates.TemplateResponse(request=request, name="editor.html", context={
+        "initial_path": sync_folder,
+        "server_url": SERVER_URL.replace("http://", "ws://").replace("https://", "wss://")
+    })

@@ -142,3 +142,29 @@ def test_public_files_page(browser_page):
 def test_redirect_to_login(browser_page):
     browser_page.goto(f"{WEBSITE_URL}/")
     assert "/login" in browser_page.url
+
+def test_editor_page_loads(browser_page):
+    browser_page.goto(f"{WEBSITE_URL}/editor")
+    assert browser_page.locator("#app").is_visible()
+    assert browser_page.locator("#sidebar").is_visible()
+    assert browser_page.locator("#editor-container").is_visible()
+    assert browser_page.locator("#terminal-container").is_visible()
+
+def test_editor_file_explorer(browser_page):
+    browser_page.goto(f"{WEBSITE_URL}/editor")
+    assert browser_page.locator("#file-explorer").is_visible()
+    assert browser_page.locator("text=Explorer").is_visible()
+
+def test_editor_monaco_editor(browser_page):
+    browser_page.goto(f"{WEBSITE_URL}/editor")
+    assert browser_page.locator(".monaco-editor").is_visible()
+
+def test_editor_terminal(browser_page):
+    browser_page.goto(f"{WEBSITE_URL}/editor")
+    browser_page.wait_for_timeout(3000)
+    assert browser_page.locator("#terminal-container").is_visible()
+
+def test_editor_status_bar(browser_page):
+    browser_page.goto(f"{WEBSITE_URL}/editor")
+    assert browser_page.locator("#status-bar").is_visible()
+    assert browser_page.locator("#status-path").is_visible()

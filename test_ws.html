@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h1>WebSocket Test</h1>
+<div id="output"></div>
+<script>
+const ws = new WebSocket('ws://localhost:3120/test');
+ws.onopen = () => {
+    document.getElementById('output').innerHTML += '<p>Connected!</p>';
+};
+ws.onmessage = (e) => {
+    document.getElementById('output').innerHTML += '<p>Message: ' + e.data + '</p>';
+};
+ws.onerror = (e) => {
+    document.getElementById('output').innerHTML += '<p>Error!</p>';
+};
+</script>
+</body>
+</html>

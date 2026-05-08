@@ -7,14 +7,16 @@ unset VIRTUAL_ENV
 
 echo "Starting box5..."
 
-echo "=== Starting Server on port 3111 ==="
+VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python"
 export SQL5_BINARY="$HOME/.cache/sql5/sql5-macos-arm64"
-cd Server && uv run uvicorn main:app --port 3111 &
+
+echo "=== Starting Server on port 3111 ==="
+cd Server && $VENV_PYTHON -m uvicorn main:app --port 3111 &
 SERVER_PID=$!
 cd "$SCRIPT_DIR"
 
 echo "=== Starting Website on port 3112 ==="
-cd Website && uv run uvicorn main:app --port 3112 &
+cd Website && $VENV_PYTHON -m uvicorn main:app --port 3112 &
 WEBSITE_PID=$!
 cd "$SCRIPT_DIR"
 
@@ -22,7 +24,7 @@ echo "=== Waiting for services to start ==="
 sleep 8
 
 echo "=== Starting Client sync ==="
-uv run python -m Client.main --username ccc --password cccpass --folder ./sync &
+$VENV_PYTHON -m Client.main --username ccc --password cccpass --folder ./sync &
 CLIENT_PID=$!
 
 echo ""

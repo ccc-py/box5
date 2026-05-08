@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>box5 Editor</title>
+    <link rel="stylesheet" href="/static/box5.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/editor/editor.main.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; height: 100vh; overflow: hidden; background: #1e1e1e; color: #ccc; }
+        #app { display: flex; height: 100vh; }
+        #main { flex: 1; display: flex; flex-direction: column; }
+        #sidebar { width: 280px; background: #252526; border-left: 1px solid #3c3c3c; display: flex; flex-direction: column; }
+        #sidebar-header { padding: 10px; font-weight: bold; border-bottom: 1px solid #3c3c3c; display: flex; justify-content: space-between; align-items: center; }
+        #file-explorer { flex: 1; overflow-y: auto; padding: 5px; }
+        .file-item { padding: 5px 10px; cursor: pointer; display: flex; align-items: center; gap: 5px; border-radius: 3px; }
+        .file-item:hover { background: #2a2d2e; }
+        .file-item.selected { background: #37373d; }
+        .file-icon { width: 16px; height: 16px; }
+        .folder-icon { color: #dcb67a; }
+        .file-icon { color: #89d185; }
+        #tabs { display: flex; background: #252526; border-bottom: 1px solid #3c3c3c; height: 35px; overflow-x: auto; }
+        .tab { padding: 8px 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; border-right: 1px solid #3c3c3c; background: #2d2d2d; color: #969696; }
+        .tab:hover { background: #2a2d2e; }
+        .tab.active { background: #1e1e1e; color: #fff; border-top: 2px solid #007acc; }
+        .tab-close { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; border-radius: 3px; }
+        .tab-close:hover { background: #4b4b4b; }
+        #editor-container { flex: 1; position: relative; }
+        #terminal-container { height: 200px; background: #1e1e1e; border-top: 1px solid #3c3c3c; }
+        .xterm { padding: 5px; }
+        #status-bar { height: 22px; background: #007acc; color: white; display: flex; align-items: center; padding: 0 10px; font-size: 12px; }
+        .status-item { margin-right: 20px; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="main">
+            <div id="tabs"></div>
+            <div id="editor-container"></div>
+            <div id="terminal-container"></div>
+            <div id="status-bar">
+                <span class="status-item" id="status-path">No file open</span>
+                <span class="status-item" id="status-lang"></span>
+            </div>
+        </div>
+        <div id="sidebar">
+            <div id="sidebar-header">
+                <span>Explorer</span>
+                <button id="refresh-btn" style="background: transparent; border: none; color: #ccc; cursor: pointer;">&#x21bb;</button>
+            </div>
+            <div id="file-explorer"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+
+    <script>
+        const serverUrl = "{{ server_url }}";
+        let ws = null;
+        let editor = null;
+        let terminal = null;
+        let currentPath = "{{ initial_path }}";
+        let openFiles = {};
+        let activeFile = null;
+
+        require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
+
+        require(['vs/editor/editor.main'], function () {
+            editor = monaco.editor.create(document.getElementById('editor-container'), {
+                theme: 'vs-dark',
+                fontSize: 14,
+                automaticLayout: true,
+                minimap: { enabled: true },
+                scrollBeyondLastLine: false
+            });
+
+            editor.onDidChangeModelContent(() => {
+                if (activeFile) {
+                    openFiles[activeFile].content = editor.getValue();
+                    openFiles[activeFile].modified = true;
+                }
+            });
+
+            initTerminal();
+            connectWebSocket();
+            loadFileList(currentPath);
+        });
+
+        function initTerminal() {
+            if (typeof Terminal === 'undefined') {
+                console.error('Terminal not loaded!');
+                return;
+            }
+            terminal = new Terminal({
+                theme: { background: '#1e1e1e' },
+                fontSize: 13,
+                fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                cursorBlink: true
+            });
+            const fitAddon = new FitAddon.FitAddon();
+            terminal.loadAddon(fitAddon);
+            terminal.open(document.getElementById('terminal-container'));
+            fitAddon.fit();
+
+            terminal.onData(data => {
+                terminal.writeln('\x1b[33mTerminal unavailable - WebSocket connection failed\x1b[0m');
+                // sendMessage('terminal_input', { command: data, cwd: currentPath });
+            });
+
+            window.addEventListener('resize', () => fitAddon.fit());
+        }
+
+        function connectWebSocket() {
+            ws = new WebSocket(serverUrl + '/ws/editor');
+
+            ws.onopen = () => {
+                terminal.writeln('\x1b[32mConnected to box5 editor\x1b[0m');
+                // File list already loaded via HTTP
+            };
+
+            ws.onerror = (error) => {
+                console.log('WebSocket error (terminal unavailable):', error);
+            };
+
+            ws.onmessage = (event) => {
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(event.data, 'text/xml');
+                const type = xml.documentElement.getAttribute('type');
+
+                if (type === 'terminal_output') {
+                    const output = xml.querySelector('output');
+                    if (output) {
+                        const data = JSON.parse(output.textContent);
+                        if (data.stdout) terminal.write(data.stdout);
+                        if (data.stderr) terminal.write('\x1b[31m' + data.stderr + '\x1b[0m');
+                    }
+                } else if (type === 'file_content') {
+                    const path = xml.querySelector('path');
+                    const content = xml.querySelector('content');
+                    const language = xml.querySelector('language');
+
+                    if (path && content) {
+                        const filePath = path.textContent;
+                        const fileContent = JSON.parse(content.textContent);
+
+                        if (!fileContent.error) {
+                            openFile(filePath, fileContent.content, language.textContent);
+                        } else {
+                            terminal.writeln('\x1b[31mError: ' + fileContent.error + '\x1b[0m');
+                        }
+                    }
+                } else if (type === 'file_list_result') {
+                    const files = xml.querySelector('files');
+                    if (files) {
+                        const data = JSON.parse(files.textContent);
+                        renderFileList(data.files || []);
+                    }
+                } else if (type === 'file_write_result') {
+                    const success = xml.querySelector('success');
+                    if (success && success.textContent === 'true') {
+                        document.getElementById('status-path').textContent = 'Saved';
+                        setTimeout(() => {
+                            document.getElementById('status-path').textContent = activeFile || 'No file open';
+                        }, 1000);
+                    }
+                } else if (type === 'error') {
+                    const message = xml.querySelector('message');
+                    if (message) {
+                        terminal.writeln('\x1b[31mError: ' + message.textContent + '\x1b[0m');
+                    }
+                }
+            };
+
+            ws.onclose = () => {
+                // WebSocket disconnected - using HTTP for file operations instead
+                // terminal.writeln('\x1b[33mNote: Terminal requires WebSocket (currently unavailable)\x1b[0m');
+            };
+        }
+
+        function sendMessage(type, content) {
+            let xml = `<message type="${type}">`;
+            for (const [key, value] of Object.entries(content)) {
+                xml += `<${key}>${value !== null ? String(value).replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''}</${key}>`;
+            }
+            xml += '</message>';
+            ws.send(xml);
+        }
+
+        function loadFileList(path) {
+            currentPath = path;
+            const httpUrl = serverUrl.replace('ws://', 'http://').replace('wss://', 'https://');
+            fetch(httpUrl + '/api/editor/files?path=' + encodeURIComponent(path))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.files) {
+                        renderFileList(data.files);
+                    }
+                })
+                .catch(err => {
+                    console.error('Error loading files:', err);
+                    terminal.writeln('\x1b[31mError loading files: ' + err + '\x1b[0m');
+                });
+        }
+
+        function renderFileList(files) {
+            const container = document.getElementById('file-explorer');
+            container.innerHTML = '';
+
+            files.forEach(file => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                item.innerHTML = `
+                    <span class="file-icon ${file.isDirectory ? 'folder-icon' : ''}">${file.isDirectory ? '📁' : '📄'}</span>
+                    <span>${file.name}</span>
+                `;
+
+                if (file.isDirectory) {
+                    item.onclick = () => loadFileList(file.path);
+                } else {
+                    item.onclick = () => {
+                        const httpUrl = serverUrl.replace('ws://', 'http://').replace('wss://', 'https://');
+                        fetch(httpUrl + '/api/editor/file?path=' + encodeURIComponent(file.path))
+                            .then(res => res.json())
+                            .then(data => {
+                                if (data.content !== undefined && !data.error) {
+                                    openFile(file.path, data.content, data.language);
+                                } else {
+                                    terminal.writeln('\x1b[31mError: ' + (data.error || 'Unknown error') + '\x1b[0m');
+                                }
+                            })
+                            .catch(err => {
+                                terminal.writeln('\x1b[31mError: ' + err + '\x1b[0m');
+                            });
+                    };
+                }
+
+                container.appendChild(item);
+            });
+        }
+
+        function openFile(path, content, language) {
+            openFiles[path] = { content, language, modified: false };
+            activeFile = path;
+
+            monaco.editor.setModelLanguage(editor.getModel(), language || 'plaintext');
+            editor.setValue(content);
+
+            renderTabs();
+            document.getElementById('status-path').textContent = path;
+            document.getElementById('status-lang').textContent = language || '';
+        }
+
+        function renderTabs() {
+            const tabsContainer = document.getElementById('tabs');
+            tabsContainer.innerHTML = '';
+
+            Object.keys(openFiles).forEach(path => {
+                const tab = document.createElement('div');
+                tab.className = 'tab' + (path === activeFile ? ' active' : '');
+                tab.innerHTML = `
+                    <span>${path.split('/').pop()}</span>
+                    <span class="tab-close" data-path="${path}">×</span>
+                `;
+                tab.onclick = (e) => {
+                    if (!e.target.classList.contains('tab-close')) {
+                        openFiles[path].content = editor.getValue();
+                        activeFile = path;
+                        const file = openFiles[path];
+                        editor.setValue(file.content);
+                        monaco.editor.setModelLanguage(editor.getModel(), file.language || 'plaintext');
+                        renderTabs();
+                        document.getElementById('status-path').textContent = path;
+                        document.getElementById('status-lang').textContent = file.language || '';
+                    }
+                };
+                tab.querySelector('.tab-close').onclick = (e) => {
+                    e.stopPropagation();
+                    closeFile(path);
+                };
+                tabsContainer.appendChild(tab);
+            });
+        }
+
+        function closeFile(path) {
+            delete openFiles[path];
+            if (activeFile === path) {
+                const remaining = Object.keys(openFiles);
+                if (remaining.length > 0) {
+                    activeFile = remaining[0];
+                    const file = openFiles[activeFile];
+                    editor.setValue(file.content);
+                    monaco.editor.setModelLanguage(editor.getModel(), file.language || 'plaintext');
+                    document.getElementById('status-path').textContent = activeFile;
+                    document.getElementById('status-lang').textContent = file.language || '';
+                } else {
+                    activeFile = null;
+                    editor.setValue('');
+                    document.getElementById('status-path').textContent = 'No file open';
+                    document.getElementById('status-lang').textContent = '';
+                }
+            }
+            renderTabs();
+        }
+
+        document.getElementById('refresh-btn').onclick = () => loadFileList(currentPath);
+
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                if (activeFile && openFiles[activeFile]) {
+                    sendMessage('file_write', { path: activeFile, content: editor.getValue() });
+                    openFiles[activeFile].modified = false;
+                }
+            }
+        });
+    </script>
+</body>
+</html>

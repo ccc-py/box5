@@ -11,7 +11,7 @@ echo "Installing Python dependencies with uv..."
 uv sync
 
 echo "Installing additional dependencies..."
-uv pip install --python .venv/bin/python jinja2 websocket-client
+uv pip install --python .venv/bin/python jinja2 websocket-client websockets
 
 echo "Installing playwright for E2E tests..."
 uv run playwright install chromium

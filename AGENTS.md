@@ -73,6 +73,21 @@ cd Website && uv run uvicorn main:app --reload --port 3112
 - `.jpg`/`.jpeg`/`.png`/`.gif`/`.webp`: Display as image
 - Other files: Redirect to download
 
+## Editor Feature (v0.5)
+- Web-based code editor similar to VSCode
+- Access at `/editor` route (default path: ./sync)
+- Monaco Editor for code editing
+- Integrated terminal with xterm.js (WebSocket has 403 issue, use HTTP API)
+- File explorer sidebar (right side)
+- Tab-based file editing
+- HTTP API endpoints: `/api/editor/files`, `/api/editor/file`
+
+## WebSocket Protocol
+- Endpoint: `/ws/editor`
+- Message format: XML with JSON payload
+- Types: `terminal_input`, `terminal_output`, `file_read`, `file_write`, `file_list`
+- Note: WebSocket has 403 issue on some environments, file operations use HTTP API instead
+
 ## Testing
 ```bash
 ./test.sh                 # Run all tests (unit + API + E2E)
@@ -82,6 +97,7 @@ python -m pytest tests/test_e2e.py -v  # E2E tests only
 ```
 
 ## Version History
+- v0.5: Web-based code editor (Monaco Editor + xterm.js), HTTP API for file operations, WebSocket for terminal (currently has 403 issue)
 - v0.4: UV migration (pyproject.toml, uv run), cross-platform path fixes, test infrastructure improvements
 - v0.3: Automated testing (Server API + Playwright E2E) - 37 tests total
 - v0.2: Bug fixes (TemplateResponse API, sql5 binary path), .html view support
