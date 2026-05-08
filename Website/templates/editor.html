@@ -9,9 +9,18 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; height: 100vh; overflow: hidden; background: #1e1e1e; color: #ccc; }
-        #app { display: flex; height: 100vh; }
-        #main { flex: 1; display: flex; flex-direction: column; }
-        #sidebar { width: 280px; background: #252526; border-left: 1px solid #3c3c3c; display: flex; flex-direction: column; }
+        #app { display: flex; flex-direction: column; height: 100vh; }
+        #menu-bar { height: 30px; background: #3c3c3c; display: flex; align-items: center; padding: 0 5px; font-size: 13px; flex-shrink: 0; }
+        .menu-item { position: relative; padding: 5px 10px; cursor: pointer; color: #ccc; }
+        .menu-item:hover { background: #4a4a4a; }
+        .menu-dropdown { display: none; position: absolute; top: 100%; left: 0; background: #252526; border: 1px solid #3c3c3c; min-width: 180px; z-index: 1000; }
+        .menu-item:hover .menu-dropdown { display: block; }
+        .menu-dropdown-item { padding: 8px 15px; color: #ccc; cursor: pointer; display: flex; justify-content: space-between; }
+        .menu-dropdown-item:hover { background: #094771; }
+        .menu-shortcut { color: #888; font-size: 12px; }
+        .menu-separator { height: 1px; background: #3c3c3c; margin: 5px 0; }
+        #content { display: flex; flex: 1; overflow: hidden; }
+        #sidebar { width: 280px; background: #252526; border-right: 1px solid #3c3c3c; display: flex; flex-direction: column; flex-shrink: 0; }
         #sidebar-header { padding: 10px; font-weight: bold; border-bottom: 1px solid #3c3c3c; display: flex; justify-content: space-between; align-items: center; }
         #file-explorer { flex: 1; overflow-y: auto; padding: 5px; }
         .file-item { padding: 5px 10px; cursor: pointer; display: flex; align-items: center; gap: 5px; border-radius: 3px; }
@@ -20,36 +29,82 @@
         .file-icon { width: 16px; height: 16px; }
         .folder-icon { color: #dcb67a; }
         .file-icon { color: #89d185; }
-        #tabs { display: flex; background: #252526; border-bottom: 1px solid #3c3c3c; height: 35px; overflow-x: auto; }
+        #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        #tabs { display: flex; background: #252526; border-bottom: 1px solid #3c3c3c; height: 35px; overflow-x: auto; flex-shrink: 0; }
         .tab { padding: 8px 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; border-right: 1px solid #3c3c3c; background: #2d2d2d; color: #969696; }
         .tab:hover { background: #2a2d2e; }
         .tab.active { background: #1e1e1e; color: #fff; border-top: 2px solid #007acc; }
         .tab-close { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; border-radius: 3px; }
         .tab-close:hover { background: #4b4b4b; }
-        #editor-container { flex: 1; position: relative; }
-        #terminal-container { height: 200px; background: #1e1e1e; border-top: 1px solid #3c3c3c; }
+        #editor-container { flex: 1; position: relative; min-height: 0; }
+        #terminal-container { height: 200px; background: #1e1e1e; border-top: 1px solid #3c3c3c; flex-shrink: 0; }
         .xterm { padding: 5px; }
-        #status-bar { height: 22px; background: #007acc; color: white; display: flex; align-items: center; padding: 0 10px; font-size: 12px; }
+        #status-bar { height: 22px; background: #007acc; color: white; display: flex; align-items: center; padding: 0 10px; font-size: 12px; flex-shrink: 0; }
         .status-item { margin-right: 20px; }
+        .menu-shortcut { color: #888; font-size: 12px; }
+        .menu-separator { height: 1px; background: #3c3c3c; margin: 5px 0; }
+        #context-menu { display: none; position: absolute; background: #252526; border: 1px solid #3c3c3c; min-width: 150px; z-index: 1000; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); }
+        #context-menu .menu-dropdown-item { padding: 8px 15px; color: #ccc; cursor: pointer; }
+        #context-menu .menu-dropdown-item:hover { background: #094771; }
     </style>
 </head>
 <body>
+    <div id="context-menu">
+        <div class="menu-dropdown-item" onclick="contextMenuAction('save')">Save</div>
+        <div class="menu-dropdown-item" onclick="contextMenuAction('rename')">Rename</div>
+        <div class="menu-separator" id="context-sep"></div>
+        <div class="menu-dropdown-item" onclick="contextMenuAction('delete')">Delete</div>
+    </div>
     <div id="app">
-        <div id="main">
-            <div id="tabs"></div>
-            <div id="editor-container"></div>
-            <div id="terminal-container"></div>
-            <div id="status-bar">
-                <span class="status-item" id="status-path">No file open</span>
-                <span class="status-item" id="status-lang"></span>
+        <div id="menu-bar">
+            <div class="menu-item" onclick="menuAction('save')">File
+                <div class="menu-dropdown">
+                    <div class="menu-dropdown-item" onclick="menuAction('save')">Save<span class="menu-shortcut">Ctrl+S</span></div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-dropdown-item" onclick="menuAction('close')">Close<span class="menu-shortcut">Ctrl+W</span></div>
+                    <div class="menu-dropdown-item" onclick="menuAction('closeAll')">Close All</div>
+                </div>
+            </div>
+            <div class="menu-item" onclick="menuAction('toggleSidebar')">View
+                <div class="menu-dropdown">
+                    <div class="menu-dropdown-item" onclick="menuAction('toggleSidebar')">Toggle Sidebar</div>
+                    <div class="menu-dropdown-item" onclick="menuAction('toggleTerminal')">Toggle Terminal</div>
+                </div>
+            </div>
+            <div class="menu-item" onclick="menuAction('about')">Help
+                <div class="menu-dropdown">
+                    <div class="menu-dropdown-item" onclick="menuAction('about')">About</div>
+                    <div class="menu-dropdown-item" onclick="menuAction('shortcuts')">Keyboard Shortcuts</div>
+                </div>
             </div>
         </div>
-        <div id="sidebar">
-            <div id="sidebar-header">
+        <div id="content">
+            <div id="sidebar">
+<div id="sidebar-header">
                 <span>Explorer</span>
-                <button id="refresh-btn" style="background: transparent; border: none; color: #ccc; cursor: pointer;">&#x21bb;</button>
+                <div style="display: flex; gap: 5px;">
+                    <button id="new-file-btn" onclick="showNewFileInput()" style="background: transparent; border: none; color: #ccc; cursor: pointer; font-size: 14px;" title="New File">📄+</button>
+                    <button id="new-folder-btn" onclick="showNewFolderInput()" style="background: transparent; border: none; color: #ccc; cursor: pointer; font-size: 14px;" title="New Folder">📁+</button>
+                    <button id="refresh-btn" onclick="loadFileList(currentPath)" style="background: transparent; border: none; color: #ccc; cursor: pointer;" title="Refresh">&#x21bb;</button>
+                </div>
             </div>
-            <div id="file-explorer"></div>
+            <div id="new-file-input-container" style="display: none; padding: 5px;">
+                <input type="text" id="new-file-input" placeholder="Enter file name..." style="width: 100%; padding: 5px; background: #3c3c3c; border: 1px solid #5a5a5a; color: #ccc; outline: none;">
+            </div>
+            <div id="new-folder-input-container" style="display: none; padding: 5px;">
+                <input type="text" id="new-folder-input" placeholder="Enter folder name..." style="width: 100%; padding: 5px; background: #3c3c3c; border: 1px solid #5a5a5a; color: #ccc; outline: none;">
+            </div>
+                <div id="file-explorer"></div>
+            </div>
+            <div id="main">
+                <div id="tabs"></div>
+                <div id="editor-container"></div>
+                <div id="terminal-container"></div>
+                <div id="status-bar">
+                    <span class="status-item" id="status-path">No file open</span>
+                    <span class="status-item" id="status-lang"></span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -231,6 +286,8 @@ if (type === 'terminal_output') {
 
         function loadFileList(path) {
             currentPath = path;
+            document.getElementById('new-file-input-container').style.display = 'none';
+            document.getElementById('new-folder-input-container').style.display = 'none';
             const httpUrl = serverUrl.replace('ws://', 'http://').replace('wss://', 'https://');
             fetch(httpUrl + '/api/editor/files?path=' + encodeURIComponent(path))
                 .then(res => res.json())
@@ -245,9 +302,88 @@ if (type === 'terminal_output') {
                 });
         }
 
+        function showNewFileInput() {
+            document.getElementById('new-file-input-container').style.display = 'block';
+            document.getElementById('new-folder-input-container').style.display = 'none';
+            const input = document.getElementById('new-file-input');
+            input.value = '';
+            input.focus();
+            input.onkeydown = function(e) {
+                if (e.key === 'Enter') {
+                    const fileName = input.value.trim();
+                    if (fileName) {
+                        createNewFile(fileName);
+                    }
+                } else if (e.key === 'Escape') {
+                    document.getElementById('new-file-input-container').style.display = 'none';
+                }
+            };
+        }
+
+        function showNewFolderInput() {
+            document.getElementById('new-file-input-container').style.display = 'none';
+            document.getElementById('new-folder-input-container').style.display = 'block';
+            const input = document.getElementById('new-folder-input');
+            input.value = '';
+            input.focus();
+            input.onkeydown = function(e) {
+                if (e.key === 'Enter') {
+                    const folderName = input.value.trim();
+                    if (folderName) {
+                        createNewFolder(folderName);
+                    }
+                } else if (e.key === 'Escape') {
+                    document.getElementById('new-folder-input-container').style.display = 'none';
+                }
+            };
+        }
+
+        function createNewFile(fileName) {
+            const filePath = currentPath + '/' + fileName;
+            const httpUrl = serverUrl.replace('ws://', 'http://').replace('wss://', 'https://');
+            fetch(httpUrl + '/api/editor/file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: filePath, content: '' })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    loadFileList(currentPath);
+                } else {
+                    terminal.writeln('\x1b[31mError: ' + (data.error || 'Unknown error') + '\x1b[0m');
+                    window.showPrompt();
+                }
+            });
+        }
+
+        function createNewFolder(folderName) {
+            const folderPath = currentPath + '/' + folderName + '/.folder';
+            const httpUrl = serverUrl.replace('ws://', 'http://').replace('wss://', 'https://');
+            fetch(httpUrl + '/api/editor/file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: folderPath, content: '' })
+            })
+            .then(res => res.json())
+            .then(data => {
+                loadFileList(currentPath);
+            });
+        }
+
         function renderFileList(files) {
             const container = document.getElementById('file-explorer');
             container.innerHTML = '';
+
+            // Add parent directory option
+            if (currentPath !== '/Users/Shared/ccc/project/box5/sync') {
+                const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+                const parentItem = document.createElement('div');
+                parentItem.className = 'file-item';
+                parentItem.innerHTML = `<span class="file-icon">⬆️</span><span>../</span>`;
+                parentItem.onclick = () => loadFileList(parentPath);
+                container.appendChild(parentItem);
+            }
 
             files.forEach(file => {
                 const item = document.createElement('div');
@@ -256,6 +392,10 @@ if (type === 'terminal_output') {
                     <span class="file-icon ${file.isDirectory ? 'folder-icon' : ''}">${file.isDirectory ? '📁' : '📄'}</span>
                     <span>${file.name}</span>
                 `;
+                item.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    showContextMenu(e.clientX, e.clientY, file);
+                };
 
                 if (file.isDirectory) {
                     item.onclick = () => loadFileList(file.path);
@@ -281,6 +421,114 @@ if (type === 'terminal_output') {
             });
         }
 
+        let contextMenuTarget = null;
+
+        function showContextMenu(x, y, file) {
+            contextMenuTarget = file;
+            const menu = document.getElementById('context-menu');
+            const sep = document.getElementById('context-sep');
+            
+            // Show/hide save option based on file type
+            const openItem = menu.querySelector('div[onclick="contextMenuAction(\'open\')"]');
+            
+            menu.style.display = 'block';
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+            
+            // Close menu when clicking elsewhere
+            document.addEventListener('click', hideContextMenu);
+        }
+
+        function hideContextMenu() {
+            document.getElementById('context-menu').style.display = 'none';
+            document.removeEventListener('click', hideContextMenu);
+        }
+
+        function contextMenuAction(action) {
+            if (!contextMenuTarget) return;
+            
+            const file = contextMenuTarget;
+            hideContextMenu();
+            
+            switch(action) {
+                case 'open':
+                    if (file.isDirectory) {
+                        loadFileList(file.path);
+                    } else {
+                        const httpUrl = serverUrl.replace('ws://', 'http://').replace('wss://', 'https://');
+                        fetch(httpUrl + '/api/editor/file?path=' + encodeURIComponent(file.path))
+                            .then(res => res.json())
+                            .then(data => {
+                                if (data.content !== undefined && !data.error) {
+                                    openFile(file.path, data.content, data.language);
+                                }
+                            });
+                    }
+                    break;
+                case 'rename':
+                    const newName = prompt('Enter new name:', file.name);
+                    if (newName && newName !== file.name) {
+                        const newPath = file.path.replace(file.name, newName);
+                        const httpUrl = serverUrl.replace('ws://', 'http://').replace('wss://', 'https://');
+                        
+                        // First, read the current file content
+                        fetch(httpUrl + '/api/editor/file?path=' + encodeURIComponent(file.path))
+                        .then(res => res.json())
+                        .then(data => {
+                            // Then write to the new path (this effectively renames)
+                            return fetch(httpUrl + '/api/editor/file', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ path: newPath, content: data.content || '' })
+                            });
+                        })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.success) {
+                                // Delete the old file
+                                return fetch(httpUrl + '/api/editor/file?path=' + encodeURIComponent(file.path), {
+                                    method: 'DELETE'
+                                });
+                            }
+                        })
+                        .then(() => {
+                            // If renaming an open file, update the openFiles
+                            if (openFiles[file.path]) {
+                                const oldContent = openFiles[file.path].content;
+                                const oldLang = openFiles[file.path].language;
+                                const oldMod = openFiles[file.path].modified;
+                                delete openFiles[file.path];
+                                openFiles[newPath] = { content: oldContent, language: oldLang, modified: oldMod };
+                                if (activeFile === file.path) {
+                                    activeFile = newPath;
+                                }
+                                renderTabs();
+                            }
+                            loadFileList(currentPath);
+                        });
+                    }
+                    break;
+                case 'delete':
+                    if (confirm('Are you sure you want to delete "' + file.name + '"?')) {
+                        const httpUrl = serverUrl.replace('ws://', 'http://').replace('wss://', 'https://');
+                        fetch(httpUrl + '/api/editor/file?path=' + encodeURIComponent(file.path), {
+                            method: 'DELETE'
+                        })
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.success) {
+                                loadFileList(currentPath);
+                            } else {
+                                terminal.writeln('\x1b[31mError: ' + (data.error || 'Unknown error') + '\x1b[0m');
+                                window.showPrompt();
+                            }
+                        });
+                    }
+                    break;
+            }
+            contextMenuTarget = null;
+        }
+
         function openFile(path, content, language) {
             openFiles[path] = { content, language, modified: false };
             activeFile = path;
@@ -293,15 +541,202 @@ if (type === 'terminal_output') {
             document.getElementById('status-lang').textContent = language || '';
         }
 
+        function menuAction(action) {
+            switch(action) {
+                case 'new':
+                    const name = prompt('Enter file name:');
+                    if (name) {
+                        const newPath = currentPath + '/' + name;
+                        openFile(newPath, '', 'plaintext');
+                        openFiles[newPath].modified = true;
+                    }
+                    break;
+                case 'open':
+                    terminal.writeln('\x1b[33mUse file explorer to open a file\x1b[0m');
+                    window.showPrompt();
+                    break;
+                case 'save':
+                    saveCurrentFile();
+                    break;
+                case 'saveAs':
+                    const saveName = prompt('Enter file name:', activeFile ? activeFile.split('/').pop() : 'untitled');
+                    if (saveName) {
+                        const newPath = currentPath + '/' + saveName;
+                        activeFile = newPath;
+                        openFiles[newPath] = { content: editor.getValue(), language: openFiles[activeFile]?.language || 'plaintext', modified: false };
+                        saveFileToServer(newPath, editor.getValue());
+                    }
+                    break;
+                case 'close':
+                    if (activeFile) {
+                        if (openFiles[activeFile].modified) {
+                            const save = confirm('File has unsaved changes. Do you want to save before closing?');
+                            if (save) {
+                                // Save and then close after save completes
+                                openFiles[activeFile].content = editor.getValue();
+                                openFiles[activeFile].modified = false;
+                                saveFileToServer(activeFile, editor.getValue());
+                                // Show prompt after a delay
+                                setTimeout(() => {
+                                    closeCurrentTab();
+                                }, 500);
+                                return;
+                            }
+                        }
+                        closeCurrentTab();
+                    }
+                    break;
+
+                case 'closeAll':
+                    // Check if any files have unsaved changes
+                    let hasUnsaved = false;
+                    for (const path in openFiles) {
+                        if (openFiles[path].modified) {
+                            hasUnsaved = true;
+                            break;
+                        }
+                    }
+                    if (hasUnsaved) {
+                        const saveAll = confirm('Some files have unsaved changes. Save all before closing?');
+                        if (saveAll) {
+                            for (const path in openFiles) {
+                                if (openFiles[path].modified) {
+                                    openFiles[path].content = editor.getValue();
+                                    openFiles[path].modified = false;
+                                    saveFileToServer(path, openFiles[path].content);
+                                }
+                            }
+                        }
+                    }
+                    openFiles = {};
+                    activeFile = null;
+                    editor.setValue('');
+                    renderTabs();
+                    break;
+                case 'undo':
+                    editor.trigger('keyboard', 'undo', null);
+                    break;
+                case 'redo':
+                    editor.trigger('keyboard', 'redo', null);
+                    break;
+                case 'cut':
+                    editor.trigger('keyboard', 'execCommand', { command: 'editor.action.clipboardCutAction' });
+                    break;
+                case 'copy':
+                    editor.trigger('keyboard', 'execCommand', { command: 'editor.action.clipboardCopyAction' });
+                    break;
+                case 'paste':
+                    editor.trigger('keyboard', 'execCommand', { command: 'editor.action.clipboardPasteAction' });
+                    break;
+                case 'toggleSidebar':
+                    const sidebar = document.getElementById('sidebar');
+                    sidebar.style.display = sidebar.style.display === 'none' ? 'flex' : 'none';
+                    break;
+                case 'toggleTerminal':
+                    const terminal = document.getElementById('terminal-container');
+                    terminal.style.display = terminal.style.display === 'none' ? 'block' : 'none';
+                    break;
+                case 'about':
+                    alert('box5 Editor v0.7\nA web-based code editor similar to VSCode');
+                    break;
+                case 'shortcuts':
+                    alert('Keyboard Shortcuts:\n\nCtrl+S - Save\nCtrl+O - Open\nCtrl+N - New File\nCtrl+W - Close\nCtrl+Z - Undo\nCtrl+Y - Redo\nCtrl+X - Cut\nCtrl+C - Copy\nCtrl+V - Paste');
+                    break;
+            }
+        }
+
+        function saveCurrentFile() {
+            if (!activeFile) {
+                terminal.writeln('\x1b[31mNo file open to save\x1b[0m');
+                window.showPrompt();
+                return;
+            }
+            openFiles[activeFile].content = editor.getValue();
+            openFiles[activeFile].modified = false;
+            saveFileToServer(activeFile, editor.getValue());
+            renderTabs();
+        }
+
+        function closeCurrentTab() {
+            delete openFiles[activeFile];
+            if (Object.keys(openFiles).length > 0) {
+                activeFile = Object.keys(openFiles)[0];
+                editor.setValue(openFiles[activeFile].content);
+            } else {
+                activeFile = null;
+                editor.setValue('');
+            }
+            renderTabs();
+        }
+
+        function saveFileToServer(path, content) {
+            const httpUrl = serverUrl.replace('ws://', 'http://').replace('wss://', 'https://');
+            fetch(httpUrl + '/api/editor/file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: path, content: content })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    terminal.writeln('\x1b[32mFile saved: ' + path + '\x1b[0m');
+                } else {
+                    terminal.writeln('\x1b[31mError saving file: ' + (data.error || 'Unknown error') + '\x1b[0m');
+                }
+                window.showPrompt();
+            })
+            .catch(err => {
+                terminal.writeln('\x1b[31mError: ' + err + '\x1b[0m');
+                window.showPrompt();
+            });
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key.toLowerCase()) {
+                    case 's':
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            menuAction('saveAs');
+                        } else {
+                            menuAction('save');
+                        }
+                        break;
+                    case 'o':
+                        e.preventDefault();
+                        menuAction('open');
+                        break;
+                    case 'n':
+                        e.preventDefault();
+                        menuAction('new');
+                        break;
+                    case 'w':
+                        e.preventDefault();
+                        menuAction('close');
+                        break;
+                    case 'z':
+                        e.preventDefault();
+                        menuAction('undo');
+                        break;
+                    case 'y':
+                        e.preventDefault();
+                        menuAction('redo');
+                        break;
+                }
+            }
+        });
+
         function renderTabs() {
             const tabsContainer = document.getElementById('tabs');
             tabsContainer.innerHTML = '';
 
             Object.keys(openFiles).forEach(path => {
+                const file = openFiles[path];
                 const tab = document.createElement('div');
                 tab.className = 'tab' + (path === activeFile ? ' active' : '');
                 tab.innerHTML = `
-                    <span>${path.split('/').pop()}</span>
+                    <span>${file.modified ? '* ' : ''}${path.split('/').pop()}</span>
                     <span class="tab-close" data-path="${path}">×</span>
                 `;
                 tab.onclick = (e) => {

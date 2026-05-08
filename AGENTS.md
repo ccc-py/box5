@@ -97,6 +97,7 @@ python -m pytest tests/test_e2e.py -v  # E2E tests only
 ```
 
 ## Version History
+- v0.7: Added menu bar (File/Edit/View/Help), keyboard shortcuts, modified file indicator
 - v0.6: Fixed Terminal WebSocket 403 issue, added terminal with command prompt
 - v0.5: Web-based code editor (Monaco Editor + xterm.js), HTTP API for file operations
 - v0.4: UV migration (pyproject.toml, uv run), cross-platform path fixes, test infrastructure improvements

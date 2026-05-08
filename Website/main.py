@@ -213,8 +213,7 @@ async def raw_file(path: str):
 
 @app.get("/editor", response_class=HTMLResponse)
 async def editor_page(request: Request, path: str = "./sync"):
-    sync_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sync")
     return templates.TemplateResponse(request=request, name="editor.html", context={
-        "initial_path": sync_folder,
+        "initial_path": path,
         "server_url": SERVER_URL.replace("http://", "ws://").replace("https://", "wss://")
     })
