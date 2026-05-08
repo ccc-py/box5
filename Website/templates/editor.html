@@ -106,9 +106,37 @@
             terminal.open(document.getElementById('terminal-container'));
             fitAddon.fit();
 
+            window.commandBuffer = "";
+            window.promptShown = false;
+
+            window.showPrompt = function() {
+                const path = currentPath.replace('/Users/Shared/ccc/project/box5', '~');
+                terminal.write('\x1b[32m' + path + '\x1b[0m $ ');
+                window.promptShown = true;
+            };
+
+            window.showPrompt();
+
             terminal.onData(data => {
-                terminal.writeln('\x1b[33mTerminal unavailable - WebSocket connection failed\x1b[0m');
-                // sendMessage('terminal_input', { command: data, cwd: currentPath });
+                // If Enter key, send the command
+                if (data === "\r" || data === "\n") {
+                    terminal.writeln("");
+                    if (window.commandBuffer.trim()) {
+                        console.log("Sending command:", window.commandBuffer);
+                        sendMessage('terminal_input', { command: window.commandBuffer, cwd: currentPath });
+                    } else {
+                        window.showPrompt();
+                    }
+                    window.commandBuffer = "";
+                } else if (data === "\x7f") {  // Backspace
+                    if (window.commandBuffer.length > 0) {
+                        window.commandBuffer = window.commandBuffer.slice(0, -1);
+                        terminal.write("\b \b");
+                    }
+                } else {
+                    window.commandBuffer += data;
+                    terminal.write(data);
+                }
             });
 
             window.addEventListener('resize', () => fitAddon.fit());
@@ -131,12 +159,19 @@
                 const xml = parser.parseFromString(event.data, 'text/xml');
                 const type = xml.documentElement.getAttribute('type');
 
-                if (type === 'terminal_output') {
+if (type === 'terminal_output') {
                     const output = xml.querySelector('output');
                     if (output) {
                         const data = JSON.parse(output.textContent);
-                        if (data.stdout) terminal.write(data.stdout);
-                        if (data.stderr) terminal.write('\x1b[31m' + data.stderr + '\x1b[0m');
+                        if (data.stdout) {
+                            const lines = data.stdout.split('\n');
+                            lines.forEach(line => terminal.writeln(line));
+                        }
+                        if (data.stderr) {
+                            const lines = data.stderr.split('\n');
+                            lines.forEach(line => terminal.writeln('\x1b[31m' + line + '\x1b[0m'));
+                        }
+                        window.showPrompt();
                     }
                 } else if (type === 'file_content') {
                     const path = xml.querySelector('path');
@@ -182,6 +217,10 @@
         }
 
         function sendMessage(type, content) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.log('WebSocket not ready, state:', ws ? ws.readyState : 'no ws');
+                return;
+            }
             let xml = `<message type="${type}">`;
             for (const [key, value] of Object.entries(content)) {
                 xml += `<${key}>${value !== null ? String(value).replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''}</${key}>`;

@@ -1,6 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -41,7 +40,7 @@ async def write_file(path: str, content: str):
     return result
 
 @app.websocket("/ws/editor")
-async def ws_editor(websocket):
+async def ws_editor(websocket: WebSocket):
     await websocket.accept()
     try:
         await websocket_endpoint(websocket)

@@ -12,7 +12,6 @@ class ConnectionManager:
         self.shell_processes: Dict[str, subprocess.Popen] = {}
 
     async def connect(self, websocket: WebSocket, client_id: str):
-        await websocket.accept()
         self.active_connections[client_id] = websocket
         self.shell_processes[client_id] = None
 
@@ -40,49 +39,74 @@ def parse_message(data: str) -> Dict[str, Any]:
 
 def create_response(msg_type: str, content: Dict[str, Any]) -> str:
     root = ET.Element("message", type=msg_type)
-    for key, value in content.items():
-        child = ET.SubElement(root, key)
-        if isinstance(value, dict):
-            child.text = json.dumps(value)
-        elif isinstance(value, str):
-            child.text = value
-        else:
-            child.text = str(value)
+    if msg_type == "terminal_output":
+        output = ET.SubElement(root, "output")
+        output.text = json.dumps(content)
+    else:
+        for key, value in content.items():
+            child = ET.SubElement(root, key)
+            if isinstance(value, dict):
+                child.text = json.dumps(value)
+            elif isinstance(value, str):
+                child.text = value
+            else:
+                child.text = str(value)
     return ET.tostring(root, encoding="unicode")
 
 async def handle_terminal_input(client_id: str, command: str, cwd: str = None):
-    if cwd:
-        os.chdir(cwd)
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Terminal command: {repr(command)}")
 
-    proc = manager.shell_processes.get(client_id)
-    if proc and proc.poll() is None:
-        proc.stdin.write(command.encode() + b"\n")
-        proc.stdin.flush()
-        return
-
+    # Execute the command
     try:
-        proc = subprocess.Popen(
-            command,
+        result = subprocess.run(
+            command.strip(),
             shell=True,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
+            text=True,
+            timeout=30,
             cwd=cwd or os.getcwd()
         )
-        manager.shell_processes[client_id] = proc
-
-        stdout, stderr = proc.communicate(timeout=30)
-        result = {
-            "stdout": stdout.decode("utf-8", errors="replace"),
-            "stderr": stderr.decode("utf-8", errors="replace"),
-            "code": proc.returncode
-        }
-        return result
+        return {"stdout": result.stdout, "stderr": result.stderr, "code": result.returncode}
     except subprocess.TimeoutExpired:
-        proc.kill()
         return {"stdout": "", "stderr": "Command timeout", "code": -1}
     except Exception as e:
         return {"stdout": "", "stderr": str(e), "code": -1}
+
+
+async def read_shell_output(client_id: str, proc: subprocess.Popen):
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        while proc.poll() is None:
+            try:
+                # Read from stdout and stderr without blocking
+                import select
+                reads = []
+                if proc.stdout:
+                    reads.append(proc.stdout)
+                if proc.stderr:
+                    reads.append(proc.stderr)
+
+                if reads:
+                    ready, _, _ = select.select(reads, [], [], 0.1)
+                    for r in ready:
+                        try:
+                            data = r.read1(1024)
+                            if data:
+                                ws = manager.active_connections.get(client_id)
+                                if ws:
+                                    result = {"stdout": data.decode("utf-8", errors="replace"), "stderr": "", "code": 0}
+                                    response = create_response("terminal_output", result)
+                                    await ws.send_text(response)
+                        except:
+                            pass
+            except:
+                pass
+            await asyncio.sleep(0.05)
+    except Exception as e:
+        logger.error(f"Error reading shell output: {e}")
 
 async def handle_file_read(path: str) -> Dict[str, Any]:
     try:
@@ -146,12 +170,10 @@ async def websocket_endpoint(websocket: WebSocket):
     client_id = str(id(websocket))
     logger.info(f"WebSocket connecting: {client_id}")
     try:
-        await websocket.accept()
-        logger.info(f"WebSocket accepted: {client_id}")
         manager.active_connections[client_id] = websocket
         manager.shell_processes[client_id] = None
     except Exception as e:
-        logger.error(f"WebSocket accept error: {e}")
+        logger.error(f"WebSocket error: {e}")
         return
 
     try:
