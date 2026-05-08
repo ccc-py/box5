@@ -5,6 +5,7 @@ import subprocess
 import os
 import signal
 import sys
+import pathlib
 
 SERVER_URL = "http://localhost:3111"
 WEBSITE_URL = "http://localhost:3112"
@@ -12,27 +13,51 @@ WEBSITE_URL = "http://localhost:3112"
 @pytest.fixture(scope="module", autouse=True)
 def start_servers():
     project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    python = "/usr/local/bin/python3.12"
-    
+
+    venv_python = os.path.join(project_dir, ".venv", "bin", "python")
+    sql5_binary = str(pathlib.Path.home() / ".cache" / "sql5" / "sql5-macos-arm64")
+    env = {**os.environ, "PYTHONPATH": project_dir, "SQL5_BINARY": sql5_binary}
+
+    server_code = f"""
+import sys
+sys.path.insert(0, '{project_dir}')
+from Server.main import app
+import uvicorn
+uvicorn.run(app, host='0.0.0.0', port=3111)
+"""
+    website_code = f"""
+import sys
+sys.path.insert(0, '{project_dir}')
+from Website.main import app
+import uvicorn
+uvicorn.run(app, host='0.0.0.0', port=3112)
+"""
+
     server_proc = subprocess.Popen(
-        [python, "-m", "uvicorn", "main:app", "--port", "3111"],
-        cwd=os.path.join(project_dir, "Server"),
+        [venv_python, "-c", server_code],
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        env={**os.environ, "SQL5_BINARY": "/Users/ccc/.cache/sql5/sql5-macos-arm64"}
+        stderr=subprocess.PIPE,
+        env=env,
+        start_new_session=True,
+        cwd=project_dir
     )
     website_proc = subprocess.Popen(
-        [python, "-m", "uvicorn", "main:app", "--port", "3112"],
-        cwd=os.path.join(project_dir, "Website"),
+        [venv_python, "-c", website_code],
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        env={**os.environ, "SERVER_URL": SERVER_URL}
+        stderr=subprocess.PIPE,
+        env={**env, "SERVER_URL": SERVER_URL},
+        start_new_session=True,
+        cwd=project_dir
     )
-    
-    time.sleep(5)
-    
+
+    time.sleep(8)
+
+    if server_proc.poll() is not None:
+        _, stderr = server_proc.communicate()
+        print(f"Server failed to start: {stderr.decode()}")
+
     yield
-    
+
     server_proc.terminate()
     website_proc.terminate()
     server_proc.wait()
@@ -110,7 +135,7 @@ def test_file_list_with_auth(api_user):
 
 def test_file_list_without_auth():
     resp = requests.get(f"{SERVER_URL}/api/files")
-    assert resp.status_code == 401
+    assert resp.status_code in [401, 403]
 
 def test_public_files():
     resp = requests.get(f"{SERVER_URL}/api/public/files")

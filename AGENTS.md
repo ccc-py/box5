@@ -4,6 +4,7 @@ Dropbox-like app: Client (desktop sync) + Server (cloud storage) + Website (web 
 
 ## Tech Stack
 - Python + FastAPI + sql5
+- Development: uv (Python package manager)
 - sql5 source: `/Users/Shared/ccc/project/sql5`
 
 ## Project Structure
@@ -20,31 +21,38 @@ Dropbox-like app: Client (desktop sync) + Server (cloud storage) + Website (web 
 4. Version planning docs: `_doc/v{x}.md` for each release, increment by 0.1
 5. Code must compile/parse with no warnings
 
+## Install
+```bash
+./install.sh              # Install dependencies with uv
+```
+
 ## Commands
 ```bash
 ./test.sh                 # Run all pytest tests
-python -m pytest tests/ -v  # Run tests with verbose output
+./run.sh                  # Run server, website, and client
+uv run pytest tests/ -v    # Run tests with verbose output
 ```
 
 ## Server Commands
 ```bash
-cd Server && uvicorn main:app --reload --port 3111
+cd Server && uv run uvicorn main:app --reload --port 3111
 ```
 
 ## Client Commands
 ```bash
-cd Client && python -m Client.main --username USER --password PASS --folder ./sync
+uv run python -m Client.main --username USER --password PASS --folder ./sync
 ```
 
 ## Website Commands
 ```bash
-cd Website && uvicorn main:app --reload --port 3112
+cd Website && uv run uvicorn main:app --reload --port 3112
 ```
 
 ## Environment Variables
 - `SERVER_URL` — Server URL (default: http://localhost:3111)
 - `DB_PATH` — Database path for sql5 (default: box5.db)
 - `SYNC_FOLDER` — Client sync folder (default: ./sync_folder)
+- `SQL5_BINARY` — Path to sql5 binary (default: ~/.cache/sql5/sql5-macos-arm64)
 
 ## Public Folder Feature
 - Put files in `sync/public/` to upload them as public (accessible without login)
@@ -74,6 +82,7 @@ python -m pytest tests/test_e2e.py -v  # E2E tests only
 ```
 
 ## Version History
+- v0.4: UV migration (pyproject.toml, uv run), cross-platform path fixes, test infrastructure improvements
 - v0.3: Automated testing (Server API + Playwright E2E) - 37 tests total
 - v0.2: Bug fixes (TemplateResponse API, sql5 binary path), .html view support
 - v0.1: Initial release with basic features

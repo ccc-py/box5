@@ -15,7 +15,7 @@ def test_markdown_rendering():
 def test_css_file_exists():
     css_path = os.path.join(
         os.path.dirname(os.path.dirname(__file__)),
-        "Website", "static", "dbox5.css"
+        "Website", "static", "box5.css"
     )
     assert os.path.exists(css_path)
     with open(css_path) as f:
