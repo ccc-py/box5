@@ -61,5 +61,10 @@ cd Website && uvicorn main:app --reload --port 3112
 ## File View/Download
 - `.md` files: Render as Markdown (bold, headers, lists, code blocks)
 - `.txt` files: Display as plain text in `<pre>` block
+- `.html` files: Render directly as HTML
 - `.jpg`/`.jpeg`/`.png`/`.gif`/`.webp`: Display as image
 - Other files: Redirect to download
+
+## Version History
+- v0.2: Bug fixes (TemplateResponse API, sql5 binary path), .html view support
+- v0.1: Initial release with basic features
