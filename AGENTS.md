@@ -65,6 +65,15 @@ cd Website && uvicorn main:app --reload --port 3112
 - `.jpg`/`.jpeg`/`.png`/`.gif`/`.webp`: Display as image
 - Other files: Redirect to download
 
+## Testing
+```bash
+./test.sh                 # Run all tests (unit + API + E2E)
+python -m pytest tests/ -v  # Run all tests with verbose output
+python -m pytest tests/test_server_api.py -v  # Server API tests only
+python -m pytest tests/test_e2e.py -v  # E2E tests only
+```
+
 ## Version History
+- v0.3: Automated testing (Server API + Playwright E2E) - 37 tests total
 - v0.2: Bug fixes (TemplateResponse API, sql5 binary path), .html view support
 - v0.1: Initial release with basic features
