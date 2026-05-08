@@ -34,16 +34,14 @@ async def root(request: Request, folder: str = ""):
             return RedirectResponse(url="/login")
         files = resp.json()
         subfolders = get_subfolders(token, folder)
-        return templates.TemplateResponse("index.html", {
-            "request": request,
+        return templates.TemplateResponse(request=request, name="index.html", context={
             "files": files,
             "subfolders": subfolders,
             "current_folder": folder,
             "username": request.cookies.get("username", "User")
         })
     except Exception:
-        return templates.TemplateResponse("index.html", {
-            "request": request,
+        return templates.TemplateResponse(request=request, name="index.html", context={
             "files": [],
             "subfolders": [],
             "current_folder": folder,
@@ -62,7 +60,7 @@ def get_subfolders(token: str, folder: str):
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="login.html")
 
 @app.post("/login")
 async def login(username: str = Form(...), password: str = Form(...)):
@@ -87,7 +85,7 @@ async def logout():
 
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request, "register": True})
+    return templates.TemplateResponse(request=request, name="login.html", context={"register": True})
 
 @app.post("/register")
 async def register(username: str = Form(...), password: str = Form(...)):
@@ -118,8 +116,7 @@ async def view_file(request: Request, file_id: int):
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
             html_content = markdown.markdown(content)
-            return templates.TemplateResponse("view.html", {
-                "request": request,
+            return templates.TemplateResponse(request=request, name="view.html", context={
                 "content": html_content,
                 "filename": filename,
                 "file_type": "markdown"
@@ -127,19 +124,22 @@ async def view_file(request: Request, file_id: int):
         elif ext == ".txt":
             with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
-            return templates.TemplateResponse("view.html", {
-                "request": request,
+            return templates.TemplateResponse(request=request, name="view.html", context={
                 "content": content,
                 "filename": filename,
                 "file_type": "text"
             })
         elif ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]:
-            return templates.TemplateResponse("view.html", {
-                "request": request,
+            return templates.TemplateResponse(request=request, name="view.html", context={
                 "filename": filename,
                 "file_type": "image",
                 "filepath": file_path
             })
+        elif ext == ".html":
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            from fastapi.responses import HTMLResponse
+            return HTMLResponse(content=content)
         else:
             return RedirectResponse(url=f"/download/{file_id}")
     except Exception as e:
@@ -150,8 +150,7 @@ async def public_files(request: Request):
     try:
         resp = requests.get(f"{API_BASE}/public/files")
         files = resp.json()
-        return templates.TemplateResponse("index.html", {
-            "request": request,
+        return templates.TemplateResponse(request=request, name="index.html", context={
             "files": files,
             "username": "Public",
             "public_view": True
@@ -193,8 +192,7 @@ async def file_history(request: Request, file_id: int):
         folder = current_file.get("folder", "")
         resp = requests.get(f"{API_BASE}/files/history/{filename}?folder={folder}", headers={"Authorization": f"Bearer {token}"})
         files = resp.json()
-        return templates.TemplateResponse("history.html", {
-            "request": request,
+        return templates.TemplateResponse(request=request, name="history.html", context={
             "files": files,
             "filename": filename,
             "folder": folder

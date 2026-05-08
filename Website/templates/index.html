@@ -132,7 +132,7 @@
                     <td>{{ file.created_at }}</td>
                     <td class="actions">
                         <a href="/history/{{ file.id }}">History</a>
-                        {% if file.filename.endswith('.md') or file.filename.endswith('.txt') or file.filename.endswith('.jpg') or file.filename.endswith('.jpeg') or file.filename.endswith('.png') or file.filename.endswith('.gif') or file.filename.endswith('.webp') %}
+                        {% if file.filename.endswith('.md') or file.filename.endswith('.txt') or file.filename.endswith('.html') or file.filename.endswith('.jpg') or file.filename.endswith('.jpeg') or file.filename.endswith('.png') or file.filename.endswith('.gif') or file.filename.endswith('.webp') %}
                         <a href="/view/{{ file.id }}">View</a>
                         {% endif %}
                         <a href="/download/{{ file.id }}">Download</a>

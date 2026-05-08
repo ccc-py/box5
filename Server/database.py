@@ -14,7 +14,10 @@ def start_websocket_server():
     global _websocket_process, _server_started
     if _server_started and _websocket_process is not None:
         return
-    binary = os.environ.get("SQL5_BINARY", "/Users/cccuser/.cache/sql5/sql5-macos-arm64")
+    binary = os.environ.get("SQL5_BINARY")
+    if not binary:
+        from sql5._binary import get_binary_path
+        binary = get_binary_path()
     _websocket_process = subprocess.Popen(
         [binary, "--websocket", "8080", DB_PATH],
         stdout=subprocess.DEVNULL,

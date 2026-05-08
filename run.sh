@@ -3,8 +3,7 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-export SQL5_BINARY="/Users/cccuser/.cache/sql5/sql5-macos-arm64"
-export PATH="$SQL5_BINARY:$PATH"
+export SQL5_BINARY="/Users/ccc/.cache/sql5/sql5-macos-arm64"
 
 echo "Starting box5..."
 
