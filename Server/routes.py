@@ -93,23 +93,27 @@ async def list_files(
     db=Depends(get_db)
 ):
     cursor = db.execute(
-        "SELECT id, filename, folder, filepath, size, is_public, created_at, updated_at FROM files WHERE id IN (SELECT MAX(id) FROM files WHERE user_id = ? AND folder = ? GROUP BY filename) ORDER BY filename",
+        "SELECT id, filename, folder, filepath, size, is_public, created_at, updated_at FROM files WHERE user_id = ? AND folder = ? ORDER BY id DESC",
         (current_user["id"], folder)
     )
     files = cursor.fetchall()
-    return [
-        {
-            "id": f[0],
-            "filename": f[1],
-            "folder": f[2],
-            "filepath": f[3],
-            "size": f[4],
-            "is_public": bool(f[5]),
-            "created_at": f[6],
-            "updated_at": f[7]
-        }
-        for f in files
-    ]
+    seen = set()
+    deduped = []
+    for f in files:
+        if f[1] not in seen:
+            seen.add(f[1])
+            deduped.append({
+                "id": f[0],
+                "filename": f[1],
+                "folder": f[2],
+                "filepath": f[3],
+                "size": f[4],
+                "is_public": bool(f[5]),
+                "created_at": f[6],
+                "updated_at": f[7]
+            })
+    deduped.sort(key=lambda x: x["filename"])
+    return deduped
 
 @router.get("/files/history/{filename}")
 async def get_file_history(
@@ -234,16 +238,53 @@ async def delete_file(
 @router.get("/public/files")
 async def list_public_files(db=Depends(get_db)):
     cursor = db.execute(
-        "SELECT id, filename, filepath, size, created_at FROM files WHERE is_public = 1 ORDER BY updated_at DESC"
+        "SELECT id, filename, filepath, size, created_at, folder FROM files WHERE is_public = 1 ORDER BY id DESC"
     )
     files = cursor.fetchall()
-    return [
-        {
-            "id": f[0],
-            "filename": f[1],
-            "filepath": f[2],
-            "size": f[3],
-            "created_at": f[4]
-        }
-        for f in files
-    ]
+    seen = set()
+    deduped = []
+    for f in files:
+        key = f"{f[5]}/{f[1]}"
+        if key not in seen:
+            seen.add(key)
+            display_name = f[1] if not f[5] else f"{f[5]}/{f[1]}"
+            deduped.append({
+                "id": f[0],
+                "filename": display_name,
+                "filepath": f[2],
+                "size": f[3],
+                "created_at": f[4]
+            })
+    return deduped
+
+@router.get("/files/bypath/{path:path}")
+async def get_file_by_path(
+    path: str,
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_db)
+):
+    parts = path.split("/")
+    filename = parts[-1]
+    folder = "/".join(parts[:-1])
+    cursor = db.execute(
+        "SELECT id, filepath, filename FROM files WHERE user_id = ? AND folder = ? AND filename = ? ORDER BY id DESC LIMIT 1",
+        (current_user["id"], folder, filename)
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="File not found")
+    return {"id": row[0], "filepath": row[1], "filename": row[2]}
+
+@router.get("/public/files/bypath/{path:path}")
+async def get_public_file_by_path(path: str, db=Depends(get_db)):
+    parts = path.split("/")
+    filename = parts[-1]
+    folder = "/".join(parts[:-1])
+    cursor = db.execute(
+        "SELECT id, filepath, filename FROM files WHERE is_public = 1 AND folder = ? AND filename = ? ORDER BY id DESC LIMIT 1",
+        (folder, filename)
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="File not found")
+    return {"id": row[0], "filepath": row[1], "filename": row[2]}

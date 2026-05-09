@@ -107,13 +107,27 @@
             {% endif %}
         </div>
         {% if current_folder %}
-        <a href="/?folder=">../</a>
-        {% else %}
-        {% if subfolders %}
-        {% for folder in subfolders %}
-        <a href="/?folder={{ folder }}">{{ folder }}/</a>
-        {% endfor %}
+        <div style="margin-bottom: 0.5rem;">
+            {% set parts = current_folder.split('/') %}
+            {% if parts|length > 1 %}
+            {% set parent = parts[:-1] | join('/') %}
+            <a href="/?folder={{ parent }}" style="font-weight: bold;">../ (Up)</a>
+            {% else %}
+            <a href="/?folder=" style="font-weight: bold;">../ (Up)</a>
+            {% endif %}
+        </div>
         {% endif %}
+        
+        {% if subfolders %}
+        <div style="margin-bottom: 1rem; padding: 0.5rem; background: #f1f8ff; border-radius: 4px;">
+            {% for folder in subfolders %}
+                {% if current_folder %}
+                <a href="/?folder={{ current_folder }}/{{ folder }}" style="margin-right: 1rem; font-weight: 500;"><span class="folder-icon">📁</span>{{ folder }}</a>
+                {% else %}
+                <a href="/?folder={{ folder }}" style="margin-right: 1rem; font-weight: 500;"><span class="folder-icon">📁</span>{{ folder }}</a>
+                {% endif %}
+            {% endfor %}
+        </div>
         {% endif %}
         <h3>Files</h3>
         <table>
@@ -134,7 +148,11 @@
                     <td class="actions">
                         <a href="/history/{{ file.id }}">History</a>
                         {% if file.filename.endswith('.md') or file.filename.endswith('.txt') or file.filename.endswith('.html') or file.filename.endswith('.jpg') or file.filename.endswith('.jpeg') or file.filename.endswith('.png') or file.filename.endswith('.gif') or file.filename.endswith('.webp') %}
-                        <a href="/view/{{ file.id }}">View</a>
+                        {% if not public_view and file.folder %}
+                        <a href="/view/{{ file.folder }}/{{ file.filename }}">View</a>
+                        {% else %}
+                        <a href="/view/{{ file.filename }}">View</a>
+                        {% endif %}
                         {% endif %}
                         <a href="/download/{{ file.id }}">Download</a>
                     </td>

@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -97,53 +97,72 @@ async def register(username: str = Form(...), password: str = Form(...)):
     except Exception:
         return HTMLResponse(content="<h1>Error</h1><a href='/register'>Try again</a>", status_code=500)
 
-@app.get("/view/{file_id}", response_class=HTMLResponse)
-async def view_file(request: Request, file_id: int):
+async def fetch_file_info_by_path(path: str, token: str):
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    if token:
+        resp = requests.get(f"{API_BASE}/files/bypath/{path}", headers=headers)
+        if resp.status_code == 200:
+            return resp.json()
+    resp = requests.get(f"{API_BASE}/public/files/bypath/{path}")
+    if resp.status_code == 200:
+        return resp.json()
+    return None
+
+@app.get("/view/{path:path}")
+async def view_file(request: Request, path: str):
     token = request.cookies.get("token")
-    if not token:
-        return RedirectResponse(url="/login")
-    try:
-        resp = requests.get(f"{API_BASE}/files/{file_id}", headers={"Authorization": f"Bearer {token}"})
-        if resp.status_code != 200:
-            raise HTTPException(status_code=404, detail="File not found")
-        file_info = resp.json()
-        file_path = file_info["filepath"]
-        filename = file_info["filename"]
-        ext = os.path.splitext(filename)[1].lower()
-        if not os.path.exists(file_path):
-            raise HTTPException(status_code=404, detail="File not found")
-        if ext == ".md":
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-            html_content = markdown.markdown(content)
-            return templates.TemplateResponse(request=request, name="view.html", context={
-                "content": html_content,
-                "filename": filename,
-                "file_type": "markdown"
-            })
-        elif ext == ".txt":
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-            return templates.TemplateResponse(request=request, name="view.html", context={
-                "content": content,
-                "filename": filename,
-                "file_type": "text"
-            })
-        elif ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]:
-            return templates.TemplateResponse(request=request, name="view.html", context={
-                "filename": filename,
-                "file_type": "image",
-                "filepath": file_path
-            })
-        elif ext == ".html":
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-            from fastapi.responses import HTMLResponse
-            return HTMLResponse(content=content)
-        else:
-            return RedirectResponse(url=f"/download/{file_id}")
-    except Exception as e:
-        return HTMLResponse(content=f"<h1>Error: {e}</h1>", status_code=500)
+    
+    file_info = await fetch_file_info_by_path(path, token)
+    if not file_info and not path.endswith(".html"):
+        file_info = await fetch_file_info_by_path(f"{path}/index.html" if path else "index.html", token)
+        
+    if not file_info:
+        if path.isdigit() and token:
+            resp = requests.get(f"{API_BASE}/files/{path}", headers={"Authorization": f"Bearer {token}"})
+            if resp.status_code == 200:
+                file_info = resp.json()
+                
+    if not file_info:
+        return HTMLResponse(content="<h1>File not found</h1>", status_code=404)
+
+    file_path = file_info["filepath"]
+    filename = file_info["filename"]
+    ext = os.path.splitext(filename)[1].lower()
+    
+    if not os.path.exists(file_path):
+        return HTMLResponse(content="<h1>File not found on disk</h1>", status_code=404)
+        
+    if ext == ".md":
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+        html_content = markdown.markdown(content)
+        return templates.TemplateResponse(request=request, name="view.html", context={
+            "content": html_content,
+            "filename": filename,
+            "file_type": "markdown"
+        })
+    elif ext == ".txt":
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+        return templates.TemplateResponse(request=request, name="view.html", context={
+            "content": content,
+            "filename": filename,
+            "file_type": "text"
+        })
+    elif ext in [".jpg", ".jpeg", ".png", ".gif", ".webp"]:
+        with open(file_path, "rb") as f:
+            content = f.read()
+        media_types = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif", ".webp": "image/webp"}
+        return Response(content, media_type=media_types.get(ext, "image/jpeg"))
+    elif ext in [".html", ".htm", ".css", ".js"]:
+        with open(file_path, "rb") as f:
+            content = f.read()
+        media_types = {".html": "text/html", ".htm": "text/html", ".css": "text/css", ".js": "text/javascript"}
+        return Response(content, media_type=media_types.get(ext, "text/plain"))
+    else:
+        with open(file_path, "rb") as f:
+            content = f.read()
+        return Response(content, media_type="application/octet-stream")
 
 @app.get("/public")
 async def public_files(request: Request):

@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ filename }} - box5</title>
+    {% if base_path %}
+    <base href="/raw{{ base_path }}/">
+    {% endif %}
     <link rel="stylesheet" href="/static/box5.css">
     <style>
         body {
