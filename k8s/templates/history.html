@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ filename }} - History - box5</title>
+    <link rel="stylesheet" href="/static/box5.css">
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 0; padding: 0; min-height: 100vh; }
+        .header { background: #007bff; color: white; padding: 1rem 2rem; }
+        .container { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+        .back-link { display: inline-block; margin-bottom: 1rem; color: #007bff; text-decoration: none; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>History: {{ filename }}</h1>
+    </div>
+    <div class="container">
+        <a href="/?folder={{ folder }}" class="back-link">Back to files</a>
+        <table>
+            <thead>
+                <tr>
+                    <th>Version</th>
+                    <th>Size</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for file in files %}
+                <tr>
+                    <td>v{{ loop.index }}</td>
+                    <td>{{ file.size }}</td>
+                    <td>{{ file.updated_at }}</td>
+                    <td>
+                        {% if file.filename.endswith('.md') or file.filename.endswith('.txt') or file.filename.endswith('.jpg') or file.filename.endswith('.jpeg') or file.filename.endswith('.png') or file.filename.endswith('.gif') or file.filename.endswith('.webp') %}
+                        <a href="/view/{{ file.id }}">View</a>
+                        {% endif %}
+                        <a href="/download/{{ file.id }}">Download</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

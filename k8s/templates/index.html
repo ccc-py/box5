@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>box5 - File Browser</title>
+    <link rel="stylesheet" href="/static/box5.css">
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+        .header {
+            background: #007bff;
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header a {
+            color: white;
+            text-decoration: none;
+            margin-left: 1rem;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+        .breadcrumb {
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .breadcrumb a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #f8f9fa;
+        }
+        a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .actions a {
+            margin-right: 0.5rem;
+        }
+        .folder-icon {
+            font-size: 1.2rem;
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>box5{% if public_view %} - Public Files{% else %} - {{ username }}{% endif %}</h1>
+        <div>
+            {% if public_view %}
+            <a href="/login">Login</a>
+            {% else %}
+            <a href="/editor" target="_blank">Editor</a>
+            <a href="/public">Public Files</a>
+            <a href="/logout">Logout</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="container">
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+        <div class="breadcrumb">
+            <a href="/">Home</a>
+            {% if current_folder %}
+            {% set parts = current_folder.split('/') %}
+            {% set path = '' %}
+            {% for part in parts %}
+                {% set path = path + '/' + part if path else part %}
+                / <a href="/?folder={{ path }}">{{ part }}</a>
+            {% endfor %}
+            {% endif %}
+        </div>
+        {% if current_folder %}
+        <div style="margin-bottom: 0.5rem;">
+            {% set parts = current_folder.split('/') %}
+            {% if parts|length > 1 %}
+            {% set parent = parts[:-1] | join('/') %}
+            <a href="/?folder={{ parent }}" style="font-weight: bold;">../ (Up)</a>
+            {% else %}
+            <a href="/?folder=" style="font-weight: bold;">../ (Up)</a>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        {% if subfolders %}
+        <div style="margin-bottom: 1rem; padding: 0.5rem; background: #f1f8ff; border-radius: 4px;">
+            {% for folder in subfolders %}
+                {% if current_folder %}
+                <a href="/?folder={{ current_folder }}/{{ folder }}" style="margin-right: 1rem; font-weight: 500;"><span class="folder-icon">📁</span>{{ folder }}</a>
+                {% else %}
+                <a href="/?folder={{ folder }}" style="margin-right: 1rem; font-weight: 500;"><span class="folder-icon">📁</span>{{ folder }}</a>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+        <h3>Files</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Filename</th>
+                    <th>Size</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for file in files %}
+                <tr>
+                    <td>{{ file.filename }}</td>
+                    <td>{{ file.size }}</td>
+                    <td>{{ file.created_at }}</td>
+                    <td class="actions">
+                        <a href="/history/{{ file.id }}">History</a>
+                        {% if file.filename.endswith('.md') or file.filename.endswith('.txt') or file.filename.endswith('.html') or file.filename.endswith('.jpg') or file.filename.endswith('.jpeg') or file.filename.endswith('.png') or file.filename.endswith('.gif') or file.filename.endswith('.webp') %}
+                        {% if not public_view and file.folder %}
+                        <a href="/view/{{ file.folder }}/{{ file.filename }}">View</a>
+                        {% else %}
+                        <a href="/view/{{ file.filename }}">View</a>
+                        {% endif %}
+                        {% endif %}
+                        <a href="/download/{{ file.id }}">Download</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4">No files in this folder</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

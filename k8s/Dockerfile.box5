@@ -1,0 +1,25 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
+
+RUN git clone https://github.com/ccc-py/box5.git /tmp/box5 && \
+    cd /tmp/box5 && \
+    uv pip install --system -r requirements.txt && \
+    mv . /app && \
+    rm -rf /tmp/box5
+
+ENV PORT=3111
+ENV PYTHONPATH=/app
+
+EXPOSE 3111
+
+WORKDIR /app/Server
+
+CMD ["python", "main.py"]
