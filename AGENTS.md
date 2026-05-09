@@ -100,6 +100,7 @@ cd Website && uv run uvicorn main:app --reload --port 3112
 - No lint/typecheck tools configured
 
 ## Version History
+- v1.0: Full path-based routing (`/view/public/...`), native relative link resolution for static site behavior, Subfolder navigation fixes, and Python-layer deduplication.
 - v0.9: PyPI distribution config (MANIFEST.in), terminal UI cleanup, multiple PTY session multiplexing, terminal websocket tests
 - v0.8: Context menu (Save/Rename/Delete), custom dialogs, close tab prompts, relative path support
 - v0.7: Added menu bar (File/Edit/View/Help), keyboard shortcuts, modified file indicator

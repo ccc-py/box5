@@ -40,10 +40,12 @@ python -m Client.main --username ccc --password cccpass --folder ./sync
 - Same filename shows only latest version on homepage
 - Click "History" to see all versions (v1, v2, v3...)
 
-### File Viewer
-- `.md` → Markdown rendered
+### File Viewer (v1.0 Static Rendering)
+- Files view natively via absolute path routes like `/view/public/ccc.md` 
+- `.md` → Markdown rendered with true relative-link support layout (e.g., `./img/ccc.jpg`)
 - `.txt` → Plain text display
-- `.jpg/.png/.gif` → Image display
+- `.html/.css/.js` → Direct static site web response execution
+- `.jpg/.png/.gif` → Native image display streaming
 - Other files → Download
 
 ### Public Files
