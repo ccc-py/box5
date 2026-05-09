@@ -20,6 +20,7 @@
         .menu-shortcut { color: #888; font-size: 12px; }
         .menu-separator { height: 1px; background: #3c3c3c; margin: 5px 0; }
         #content { display: flex; flex: 1; overflow: hidden; }
+        .hidden { display: none !important; }
         #sidebar { width: 280px; background: #252526; border-right: 1px solid #3c3c3c; display: flex; flex-direction: column; flex-shrink: 0; }
         #sidebar-header { padding: 10px; font-weight: bold; border-bottom: 1px solid #3c3c3c; display: flex; justify-content: space-between; align-items: center; }
         #file-explorer { flex: 1; overflow-y: auto; padding: 5px; }
@@ -37,7 +38,13 @@
         .tab-close { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; border-radius: 3px; }
         .tab-close:hover { background: #4b4b4b; }
         #editor-container { flex: 1; position: relative; min-height: 0; }
-        #terminal-container { height: 200px; background: #1e1e1e; border-top: 1px solid #3c3c3c; flex-shrink: 0; }
+        #terminal-tabs { display: flex; background: #252526; border-bottom: 1px solid #3c3c3c; height: 30px; overflow-x: auto; flex-shrink: 0; }
+        .terminal-tab { padding: 5px 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; border-right: 1px solid #3c3c3c; background: #2d2d2d; color: #969696; font-size: 12px; }
+        .terminal-tab:hover { background: #2a2d2e; }
+        .terminal-tab.active { background: #1e1e1e; color: #fff; border-top: 2px solid #4a9eff; }
+        .terminal-tab-close { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; border-radius: 3px; margin-left: 5px; }
+        .terminal-tab-close:hover { background: #4b4b4b; }
+        #terminal-container { height: 170px; background: #1e1e1e; border-top: 1px solid #3c3c3c; flex-shrink: 0; }
         .xterm { padding: 5px; }
         #status-bar { height: 22px; background: #007acc; color: white; display: flex; align-items: center; padding: 0 10px; font-size: 12px; flex-shrink: 0; }
         .status-item { margin-right: 20px; }
@@ -50,9 +57,12 @@
 </head>
 <body>
     <div id="context-menu">
+        <div class="menu-dropdown-item" onclick="contextMenuAction('newTerminal')">New Terminal</div>
+        <div class="menu-separator" id="context-sep1"></div>
+        <div class="menu-dropdown-item" onclick="contextMenuAction('open')">Open</div>
         <div class="menu-dropdown-item" onclick="contextMenuAction('save')">Save</div>
         <div class="menu-dropdown-item" onclick="contextMenuAction('rename')">Rename</div>
-        <div class="menu-separator" id="context-sep"></div>
+        <div class="menu-separator" id="context-sep2"></div>
         <div class="menu-dropdown-item" onclick="contextMenuAction('delete')">Delete</div>
     </div>
     <div id="app">
@@ -65,13 +75,13 @@
                     <div class="menu-dropdown-item" onclick="menuAction('closeAll')">Close All</div>
                 </div>
             </div>
-            <div class="menu-item" onclick="menuAction('toggleSidebar')">View
+            <div class="menu-item">View
                 <div class="menu-dropdown">
                     <div class="menu-dropdown-item" onclick="menuAction('toggleSidebar')">Toggle Sidebar</div>
                     <div class="menu-dropdown-item" onclick="menuAction('toggleTerminal')">Toggle Terminal</div>
                 </div>
             </div>
-            <div class="menu-item" onclick="menuAction('about')">Help
+            <div class="menu-item">Help
                 <div class="menu-dropdown">
                     <div class="menu-dropdown-item" onclick="menuAction('about')">About</div>
                     <div class="menu-dropdown-item" onclick="menuAction('shortcuts')">Keyboard Shortcuts</div>
@@ -99,6 +109,7 @@
             <div id="main">
                 <div id="tabs"></div>
                 <div id="editor-container"></div>
+                <div id="terminal-tabs"></div>
                 <div id="terminal-container"></div>
                 <div id="status-bar">
                     <span class="status-item" id="status-path">No file open</span>
@@ -117,10 +128,12 @@
         const serverUrl = "{{ server_url }}";
         let ws = null;
         let editor = null;
-        let terminal = null;
+        let terminals = {};
+        let activeTerminalId = null;
         let currentPath = "{{ initial_path }}";
         let openFiles = {};
         let activeFile = null;
+        let terminalCounter = 0;
 
         require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
 
@@ -145,88 +158,157 @@
             loadFileList(currentPath);
         });
 
-        function initTerminal() {
+        function getCurrentTerminal() {
+            return activeTerminalId ? terminals[activeTerminalId] : null;
+        }
+
+        function createTerminal(cwd = null) {
             if (typeof Terminal === 'undefined') {
                 console.error('Terminal not loaded!');
-                return;
+                return null;
             }
-            terminal = new Terminal({
+            const id = 'terminal-' + (++terminalCounter);
+            const termCwd = cwd || currentPath;
+
+            const term = new Terminal({
                 theme: { background: '#1e1e1e' },
                 fontSize: 13,
                 fontFamily: 'Menlo, Monaco, "Courier New", monospace',
                 cursorBlink: true
             });
             const fitAddon = new FitAddon.FitAddon();
-            terminal.loadAddon(fitAddon);
-            terminal.open(document.getElementById('terminal-container'));
-            fitAddon.fit();
+            term.loadAddon(fitAddon);
 
-            window.commandBuffer = "";
-            window.promptShown = false;
-
-            window.showPrompt = function() {
-                const path = currentPath.replace('/Users/Shared/ccc/project/box5', '~');
-                terminal.write('\x1b[32m' + path + '\x1b[0m $ ');
-                window.promptShown = true;
+            const termData = {
+                terminal: term,
+                fitAddon: fitAddon,
+                cwd: termCwd,
+                commandBuffer: ""
             };
 
-            window.showPrompt();
+            terminals[id] = termData;
 
-            terminal.onData(data => {
-                // If Enter key, send the command
-                if (data === "\r" || data === "\n") {
-                    terminal.writeln("");
-                    if (window.commandBuffer.trim()) {
-                        console.log("Sending command:", window.commandBuffer);
-                        sendMessage('terminal_input', { command: window.commandBuffer, cwd: currentPath });
-                    } else {
-                        window.showPrompt();
-                    }
-                    window.commandBuffer = "";
-                } else if (data === "\x7f") {  // Backspace
-                    if (window.commandBuffer.length > 0) {
-                        window.commandBuffer = window.commandBuffer.slice(0, -1);
-                        terminal.write("\b \b");
-                    }
-                } else {
-                    window.commandBuffer += data;
-                    terminal.write(data);
-                }
+            // Start PTY shell if websocket is already connected
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                sendMessage('terminal_input', { terminal_id: id, command: '', cwd: termCwd });
+            }
+
+            showTerminal(id);
+
+            term.onData(data => {
+                sendMessage('terminal_input', { terminal_id: id, raw_data: JSON.stringify(data), cwd: termData.cwd });
             });
 
-            window.addEventListener('resize', () => fitAddon.fit());
+            renderTerminalTabs();
+            return id;
+        }
+
+        function showTerminal(id) {
+            const container = document.getElementById('terminal-container');
+            container.innerHTML = '';
+
+            Object.keys(terminals).forEach(tid => {
+                terminals[tid].terminal.element && (terminals[tid].terminal.element.style.display = 'none');
+            });
+
+            activeTerminalId = id;
+            const termData = terminals[id];
+            termData.terminal.open(container);
+            termData.fitAddon.fit();
+
+            renderTerminalTabs();
+        }
+
+        function renderTerminalTabs() {
+            const tabsContainer = document.getElementById('terminal-tabs');
+            tabsContainer.innerHTML = '';
+
+            Object.keys(terminals).forEach(id => {
+                const termData = terminals[id];
+                const tab = document.createElement('div');
+                tab.className = 'terminal-tab' + (id === activeTerminalId ? ' active' : '');
+                const path = termData.cwd.split('/').pop() || '~';
+                tab.innerHTML = `
+                    <span>${path}</span>
+                    <span class="terminal-tab-close" data-id="${id}">×</span>
+                `;
+                tab.onclick = (e) => {
+                    if (!e.target.classList.contains('terminal-tab-close')) {
+                        showTerminal(id);
+                    }
+                };
+                tab.querySelector('.terminal-tab-close').onclick = (e) => {
+                    e.stopPropagation();
+                    closeTerminal(id);
+                };
+                tabsContainer.appendChild(tab);
+            });
+        }
+
+        function closeTerminal(id) {
+            const termData = terminals[id];
+            if (termData) {
+                termData.terminal.dispose();
+                delete terminals[id];
+                
+                sendMessage('terminal_input', { terminal_id: id, command: 'exit' });
+
+                if (Object.keys(terminals).length === 0) {
+                    createTerminal();
+                } else if (id === activeTerminalId) {
+                    showTerminal(Object.keys(terminals)[0]);
+                }
+                renderTerminalTabs();
+            }
+        }
+
+        function initTerminal() {
+            createTerminal();
+            window.addEventListener('resize', () => {
+                if (activeTerminalId && terminals[activeTerminalId]) {
+                    terminals[activeTerminalId].fitAddon.fit();
+                }
+            });
         }
 
         function connectWebSocket() {
             ws = new WebSocket(serverUrl + '/ws/editor');
 
             ws.onopen = () => {
-                terminal.writeln('\x1b[32mConnected to box5 editor\x1b[0m');
-                // File list already loaded via HTTP
+                const termData = activeTerminalId ? terminals[activeTerminalId] : null;
+                if (termData) {
+                    termData.terminal.writeln('\x1b[32mConnected to box5 editor\x1b[0m');
+                }
+                // Initialize all terminals that were created before websocket connection
+                Object.keys(terminals).forEach(id => {
+                    const t = terminals[id];
+                    sendMessage('terminal_input', { terminal_id: id, command: '', cwd: t.cwd });
+                });
             };
 
             ws.onerror = (error) => {
                 console.log('WebSocket error (terminal unavailable):', error);
             };
 
-            ws.onmessage = (event) => {
+ws.onmessage = (event) => {
                 const parser = new DOMParser();
                 const xml = parser.parseFromString(event.data, 'text/xml');
                 const type = xml.documentElement.getAttribute('type');
 
-if (type === 'terminal_output') {
+                if (type === 'terminal_output') {
                     const output = xml.querySelector('output');
                     if (output) {
                         const data = JSON.parse(output.textContent);
-                        if (data.stdout) {
-                            const lines = data.stdout.split('\n');
-                            lines.forEach(line => terminal.writeln(line));
+                        const targetId = data.terminal_id || activeTerminalId;
+                        const termData = targetId ? terminals[targetId] : null;
+                        if (termData) {
+                            if (data.stdout) {
+                                termData.terminal.write(data.stdout);
+                            }
+                            if (data.stderr) {
+                                termData.terminal.write('\x1b[31m' + data.stderr + '\x1b[0m');
+                            }
                         }
-                        if (data.stderr) {
-                            const lines = data.stderr.split('\n');
-                            lines.forEach(line => terminal.writeln('\x1b[31m' + line + '\x1b[0m'));
-                        }
-                        window.showPrompt();
                     }
                 } else if (type === 'file_content') {
                     const path = xml.querySelector('path');
@@ -240,7 +322,7 @@ if (type === 'terminal_output') {
                         if (!fileContent.error) {
                             openFile(filePath, fileContent.content, language.textContent);
                         } else {
-                            terminal.writeln('\x1b[31mError: ' + fileContent.error + '\x1b[0m');
+                            showAlert('Error: ' + fileContent.error);
                         }
                     }
                 } else if (type === 'file_list_result') {
@@ -260,7 +342,7 @@ if (type === 'terminal_output') {
                 } else if (type === 'error') {
                     const message = xml.querySelector('message');
                     if (message) {
-                        terminal.writeln('\x1b[31mError: ' + message.textContent + '\x1b[0m');
+                        showAlert('Error: ' + message.textContent);
                     }
                 }
             };
@@ -298,7 +380,7 @@ if (type === 'terminal_output') {
                 })
                 .catch(err => {
                     console.error('Error loading files:', err);
-                    terminal.writeln('\x1b[31mError loading files: ' + err + '\x1b[0m');
+                    showAlert('Error loading files: ' + err);
                 });
         }
 
@@ -351,8 +433,7 @@ if (type === 'terminal_output') {
                 if (data.success) {
                     loadFileList(currentPath);
                 } else {
-                    terminal.writeln('\x1b[31mError: ' + (data.error || 'Unknown error') + '\x1b[0m');
-                    window.showPrompt();
+                    showAlert('Error: ' + (data.error || 'Unknown error'));
                 }
             });
         }
@@ -404,15 +485,15 @@ if (type === 'terminal_output') {
                         const httpUrl = serverUrl.replace('ws://', 'http://').replace('wss://', 'https://');
                         fetch(httpUrl + '/api/editor/file?path=' + encodeURIComponent(file.path))
                             .then(res => res.json())
-                            .then(data => {
-                                if (data.content !== undefined && !data.error) {
-                                    openFile(file.path, data.content, data.language);
-                                } else {
-                                    terminal.writeln('\x1b[31mError: ' + (data.error || 'Unknown error') + '\x1b[0m');
-                                }
-                            })
+.then(data => {
+                                 if (data.content !== undefined && !data.error) {
+                                     openFile(file.path, data.content, data.language);
+                                 } else {
+                                     showAlert('Error: ' + (data.error || 'Unknown error'));
+                                 }
+                             })
                             .catch(err => {
-                                terminal.writeln('\x1b[31mError: ' + err + '\x1b[0m');
+                                showAlert('Error: ' + err);
                             });
                     };
                 }
@@ -451,6 +532,10 @@ if (type === 'terminal_output') {
             hideContextMenu();
             
             switch(action) {
+                case 'newTerminal':
+                    const termCwd = file.isDirectory ? file.path : file.path.substring(0, file.path.lastIndexOf('/'));
+                    createTerminal(termCwd);
+                    break;
                 case 'open':
                     if (file.isDirectory) {
                         loadFileList(file.path);
@@ -466,7 +551,7 @@ if (type === 'terminal_output') {
                     }
                     break;
                 case 'rename':
-                    const newName = prompt('Enter new name:', file.name);
+                    showPrompt('請輸入新名稱:', file.name, (newName) => {
                     if (newName && newName !== file.name) {
                         const newPath = file.path.replace(file.name, newName);
                         const httpUrl = serverUrl.replace('ws://', 'http://').replace('wss://', 'https://');
@@ -506,10 +591,10 @@ if (type === 'terminal_output') {
                             }
                             loadFileList(currentPath);
                         });
-                    }
+                    }});
                     break;
                 case 'delete':
-                    if (confirm('Are you sure you want to delete "' + file.name + '"?')) {
+                    showConfirm('確定要刪除「' + file.name + '」嗎？', () => {
                         const httpUrl = serverUrl.replace('ws://', 'http://').replace('wss://', 'https://');
                         fetch(httpUrl + '/api/editor/file?path=' + encodeURIComponent(file.path), {
                             method: 'DELETE'
@@ -519,11 +604,10 @@ if (type === 'terminal_output') {
                             if (data.success) {
                                 loadFileList(currentPath);
                             } else {
-                                terminal.writeln('\x1b[31mError: ' + (data.error || 'Unknown error') + '\x1b[0m');
-                                window.showPrompt();
+                                showAlert('Error: ' + (data.error || 'Unknown error'));
                             }
                         });
-                    }
+                    }, () => {});
                     break;
             }
             contextMenuTarget = null;
@@ -544,51 +628,51 @@ if (type === 'terminal_output') {
         function menuAction(action) {
             switch(action) {
                 case 'new':
-                    const name = prompt('Enter file name:');
-                    if (name) {
-                        const newPath = currentPath + '/' + name;
-                        openFile(newPath, '', 'plaintext');
-                        openFiles[newPath].modified = true;
-                    }
+                    showPrompt('請輸入檔案名稱:', '', (name) => {
+                        if (name) {
+                            const newPath = currentPath + '/' + name;
+                            openFile(newPath, '', 'plaintext');
+                            openFiles[newPath].modified = true;
+                        }
+                    });
                     break;
                 case 'open':
-                    terminal.writeln('\x1b[33mUse file explorer to open a file\x1b[0m');
-                    window.showPrompt();
+                    showAlert('Use file explorer to open a file');
                     break;
                 case 'save':
                     saveCurrentFile();
                     break;
                 case 'saveAs':
-                    const saveName = prompt('Enter file name:', activeFile ? activeFile.split('/').pop() : 'untitled');
-                    if (saveName) {
-                        const newPath = currentPath + '/' + saveName;
-                        activeFile = newPath;
-                        openFiles[newPath] = { content: editor.getValue(), language: openFiles[activeFile]?.language || 'plaintext', modified: false };
-                        saveFileToServer(newPath, editor.getValue());
-                    }
+                    showPrompt('請輸入檔案名稱:', activeFile ? activeFile.split('/').pop() : 'untitled', (saveName) => {
+                        if (saveName) {
+                            const newPath = currentPath + '/' + saveName;
+                            activeFile = newPath;
+                            openFiles[newPath] = { content: editor.getValue(), language: openFiles[activeFile]?.language || 'plaintext', modified: false };
+                            saveFileToServer(newPath, editor.getValue());
+                            renderTabs();
+                        }
+                    });
                     break;
                 case 'close':
                     if (activeFile) {
                         if (openFiles[activeFile].modified) {
-                            const save = confirm('File has unsaved changes. Do you want to save before closing?');
-                            if (save) {
-                                // Save and then close after save completes
-                                openFiles[activeFile].content = editor.getValue();
-                                openFiles[activeFile].modified = false;
-                                saveFileToServer(activeFile, editor.getValue());
-                                // Show prompt after a delay
-                                setTimeout(() => {
-                                    closeCurrentTab();
-                                }, 500);
-                                return;
-                            }
+                            showConfirm(
+                                '檔案有未儲存的修改。<br><br>點「確定」儲存。<br>點「取消」不儲存並關閉。',
+                                () => {
+                                    openFiles[activeFile].content = editor.getValue();
+                                    openFiles[activeFile].modified = false;
+                                    saveFileToServer(activeFile, editor.getValue());
+                                    setTimeout(() => { closeCurrentTab(); }, 500);
+                                },
+                                () => { closeCurrentTab(); }
+                            );
+                            return;
                         }
                         closeCurrentTab();
                     }
                     break;
 
                 case 'closeAll':
-                    // Check if any files have unsaved changes
                     let hasUnsaved = false;
                     for (const path in openFiles) {
                         if (openFiles[path].modified) {
@@ -597,16 +681,19 @@ if (type === 'terminal_output') {
                         }
                     }
                     if (hasUnsaved) {
-                        const saveAll = confirm('Some files have unsaved changes. Save all before closing?');
-                        if (saveAll) {
-                            for (const path in openFiles) {
-                                if (openFiles[path].modified) {
-                                    openFiles[path].content = editor.getValue();
-                                    openFiles[path].modified = false;
-                                    saveFileToServer(path, openFiles[path].content);
+                        showConfirm(
+                            '部分檔案有未儲存的修改。<br><br>點「確定」儲存全部。<br>點「取消」不儲存並全部關閉。',
+                            () => {
+                                for (const path in openFiles) {
+                                    if (openFiles[path].modified) {
+                                        openFiles[path].content = editor.getValue();
+                                        openFiles[path].modified = false;
+                                        saveFileToServer(path, openFiles[path].content);
+                                    }
                                 }
-                            }
-                        }
+                            },
+                            () => {}
+                        );
                     }
                     openFiles = {};
                     activeFile = null;
@@ -630,25 +717,32 @@ if (type === 'terminal_output') {
                     break;
                 case 'toggleSidebar':
                     const sidebar = document.getElementById('sidebar');
-                    sidebar.style.display = sidebar.style.display === 'none' ? 'flex' : 'none';
+                    if (sidebar.style.display === 'none') {
+                        sidebar.style.display = 'flex';
+                    } else {
+                        sidebar.style.display = 'none';
+                    }
                     break;
                 case 'toggleTerminal':
                     const terminal = document.getElementById('terminal-container');
-                    terminal.style.display = terminal.style.display === 'none' ? 'block' : 'none';
+                    if (terminal.style.display === 'none') {
+                        terminal.style.display = 'block';
+                    } else {
+                        terminal.style.display = 'none';
+                    }
                     break;
                 case 'about':
-                    alert('box5 Editor v0.7\nA web-based code editor similar to VSCode');
+                    showAlert('box5 Editor v0.7\nA web-based code editor similar to VSCode');
                     break;
                 case 'shortcuts':
-                    alert('Keyboard Shortcuts:\n\nCtrl+S - Save\nCtrl+O - Open\nCtrl+N - New File\nCtrl+W - Close\nCtrl+Z - Undo\nCtrl+Y - Redo\nCtrl+X - Cut\nCtrl+C - Copy\nCtrl+V - Paste');
+                    showAlert('Keyboard Shortcuts:\n\nCtrl+S - 儲存\nCtrl+O - 開啟\nCtrl+N - 新檔案\nCtrl+W - 關閉\nCtrl+Z - 復原\nCtrl+Y - 重做\nCtrl+X - 剪下\nCtrl+C - 複製\nCtrl+V - 貼上');
                     break;
             }
         }
 
         function saveCurrentFile() {
             if (!activeFile) {
-                terminal.writeln('\x1b[31mNo file open to save\x1b[0m');
-                window.showPrompt();
+                showAlert('No file open to save');
                 return;
             }
             openFiles[activeFile].content = editor.getValue();
@@ -679,15 +773,16 @@ if (type === 'terminal_output') {
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    terminal.writeln('\x1b[32mFile saved: ' + path + '\x1b[0m');
+                    document.getElementById('status-path').textContent = 'Saved';
+                    setTimeout(() => {
+                        document.getElementById('status-path').textContent = activeFile || 'No file open';
+                    }, 2000);
                 } else {
-                    terminal.writeln('\x1b[31mError saving file: ' + (data.error || 'Unknown error') + '\x1b[0m');
+                    showAlert('Error saving file: ' + (data.error || 'Unknown error'));
                 }
-                window.showPrompt();
             })
             .catch(err => {
-                terminal.writeln('\x1b[31mError: ' + err + '\x1b[0m');
-                window.showPrompt();
+                showAlert('Error: ' + err);
             });
         }
 
@@ -741,7 +836,9 @@ if (type === 'terminal_output') {
                 `;
                 tab.onclick = (e) => {
                     if (!e.target.classList.contains('tab-close')) {
-                        openFiles[path].content = editor.getValue();
+                        if (activeFile && openFiles[activeFile]) {
+                            openFiles[activeFile].content = editor.getValue();
+                        }
                         activeFile = path;
                         const file = openFiles[path];
                         editor.setValue(file.content);
@@ -760,6 +857,23 @@ if (type === 'terminal_output') {
         }
 
         function closeFile(path) {
+            if (openFiles[path] && openFiles[path].modified) {
+                showConfirm(
+                    '檔案有未儲存的修改。<br><br>點「確定」儲存。<br>點「取消」不儲存並關閉。',
+                    () => {
+                        openFiles[path].content = editor.getValue();
+                        openFiles[path].modified = false;
+                        saveFileToServer(path, openFiles[path].content);
+                        doCloseFile(path);
+                    },
+                    () => { doCloseFile(path); }
+                );
+                return;
+            }
+            doCloseFile(path);
+        }
+
+        function doCloseFile(path) {
             delete openFiles[path];
             if (activeFile === path) {
                 const remaining = Object.keys(openFiles);
@@ -790,7 +904,104 @@ if (type === 'terminal_output') {
                     openFiles[activeFile].modified = false;
                 }
             }
+            if ((e.ctrlKey || e.metaKey) && e.key === '`') {
+                e.preventDefault();
+                createTerminal();
+            }
         });
+    </script>
+<div id="confirm-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10000; justify-content:center; align-items:center;">
+        <div style="background:#2d2d2d; padding:20px; border-radius:8px; min-width:300px; box-shadow:0 4px 20px rgba(0,0,0,0.5);">
+            <div id="confirm-message" style="color:#ddd; margin-bottom:20px; font-size:14px; line-height:1.5;"></div>
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button id="confirm-cancel" style="background:#555; color:#fff; border:none; padding:8px 16px; border-radius:4px; cursor:pointer;">取消</button>
+                <button id="confirm-ok" style="background:#4a9eff; color:#fff; border:none; padding:8px 16px; border-radius:4px; cursor:pointer;">確定</button>
+            </div>
+        </div>
+    </div>
+    <div id="alert-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10001; justify-content:center; align-items:center;">
+        <div style="background:#2d2d2d; padding:20px; border-radius:8px; min-width:300px; box-shadow:0 4px 20px rgba(0,0,0,0.5);">
+            <div id="alert-message" style="color:#ddd; margin-bottom:20px; font-size:14px; line-height:1.5; white-space: pre-wrap;"></div>
+            <div style="display:flex; gap:10px; justify-content:center;">
+                <button id="alert-ok" style="background:#4a9eff; color:#fff; border:none; padding:8px 24px; border-radius:4px; cursor:pointer;">確定</button>
+            </div>
+        </div>
+    </div>
+    <div id="prompt-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10002; justify-content:center; align-items:center;">
+        <div style="background:#2d2d2d; padding:20px; border-radius:8px; min-width:300px; box-shadow:0 4px 20px rgba(0,0,0,0.5);">
+            <div id="prompt-label" style="color:#ddd; margin-bottom:10px; font-size:14px;"></div>
+            <input type="text" id="prompt-input" style="width:100%; padding:8px; background:#3c3c3c; border:1px solid #5a5a5a; color:#fff; border-radius:4px; margin-bottom:15px; box-sizing:border-box;">
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button id="prompt-cancel" style="background:#555; color:#fff; border:none; padding:8px 16px; border-radius:4px; cursor:pointer;">取消</button>
+                <button id="prompt-ok" style="background:#4a9eff; color:#fff; border:none; padding:8px 16px; border-radius:4px; cursor:pointer;">確定</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        let confirmCallback = null;
+        const modal = document.getElementById('confirm-modal');
+        const modalMsg = document.getElementById('confirm-message');
+        const modalOk = document.getElementById('confirm-ok');
+        const modalCancel = document.getElementById('confirm-cancel');
+
+        function showConfirm(message, onOk, onCancel) {
+            modalMsg.innerHTML = message;
+            modal.style.display = 'flex';
+            confirmCallback = { onOk, onCancel };
+        }
+
+        modalOk.onclick = () => {
+            modal.style.display = 'none';
+            if (confirmCallback && confirmCallback.onOk) confirmCallback.onOk();
+        };
+        modalCancel.onclick = () => {
+            modal.style.display = 'none';
+            if (confirmCallback && confirmCallback.onCancel) confirmCallback.onCancel();
+        };
+
+        let alertCallback = null;
+        const alertModal = document.getElementById('alert-modal');
+        const alertMsg = document.getElementById('alert-message');
+        const alertOk = document.getElementById('alert-ok');
+
+        function showAlert(message, onOk) {
+            alertMsg.textContent = message;
+            alertModal.style.display = 'flex';
+            alertCallback = onOk;
+        }
+
+        alertOk.onclick = () => {
+            alertModal.style.display = 'none';
+            if (alertCallback) alertCallback();
+        };
+
+        let promptCallback = null;
+        const promptModal = document.getElementById('prompt-modal');
+        const promptLabel = document.getElementById('prompt-label');
+        const promptInput = document.getElementById('prompt-input');
+        const promptOk = document.getElementById('prompt-ok');
+        const promptCancel = document.getElementById('prompt-cancel');
+
+        function showPrompt(label, defaultValue, onOk) {
+            promptLabel.textContent = label;
+            promptInput.value = defaultValue || '';
+            promptModal.style.display = 'flex';
+            promptInput.focus();
+            promptCallback = onOk;
+        }
+
+        promptOk.onclick = () => {
+            promptModal.style.display = 'none';
+            if (promptCallback) promptCallback(promptInput.value);
+        };
+        promptCancel.onclick = () => {
+            promptModal.style.display = 'none';
+            if (promptCallback) promptCallback(null);
+        };
+        promptInput.onkeydown = (e) => {
+            if (e.key === 'Enter') promptOk.click();
+            if (e.key === 'Escape') promptCancel.click();
+        };
     </script>
 </body>
 </html>

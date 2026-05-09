@@ -163,6 +163,7 @@ def test_editor_terminal(browser_page):
     browser_page.goto(f"{WEBSITE_URL}/editor")
     browser_page.wait_for_timeout(3000)
     assert browser_page.locator("#terminal-container").is_visible()
+    assert browser_page.locator("#terminal-tabs").is_visible()
 
 def test_editor_status_bar(browser_page):
     browser_page.goto(f"{WEBSITE_URL}/editor")

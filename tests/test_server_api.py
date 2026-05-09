@@ -173,3 +173,38 @@ def test_subfolders(api_user):
     assert resp.status_code == 200
     data = resp.json()
     assert "subfolders" in data
+
+def test_terminal_websocket():
+    import websockets
+    import asyncio
+    import json
+
+    async def run_test():
+        uri = f"ws://localhost:3111/ws/editor"
+        try:
+            async with websockets.connect(uri) as ws:
+                # Init shell
+                await ws.send('<message type="terminal_input"><command></command><cwd>./</cwd></message>')
+                
+                # Consume prompt
+                for _ in range(5):
+                    try:
+                        await asyncio.wait_for(ws.recv(), timeout=0.5)
+                    except asyncio.TimeoutError:
+                        break
+                        
+                # Send raw data
+                data_json = json.dumps("ls\r")
+                req = f'<message type="terminal_input"><raw_data>{data_json}</raw_data></message>'
+                await ws.send(req)
+                
+                # Check response
+                res = await asyncio.wait_for(ws.recv(), timeout=2.0)
+                assert res is not None
+                
+                # Send exit
+                await ws.send('<message type="terminal_input"><command>exit</command></message>')
+        except Exception as e:
+            pytest.fail(f"WebSocket test failed: {e}")
+
+    asyncio.run(run_test())

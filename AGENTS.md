@@ -19,7 +19,7 @@ Dropbox-like app: Client (desktop sync) + Server (cloud storage) + Website (web 
 2. Create `test.sh` for project testing
 3. Split into modules if code exceeds 1000 lines
 4. Version planning docs: `_doc/v{x}.md` for each release, increment by 0.1
-5. Code must compile/parse with no warnings
+5. Code must compile/parse with no warnings (no lint/typecheck tools configured)
 
 ## Install
 ```bash
@@ -28,9 +28,9 @@ Dropbox-like app: Client (desktop sync) + Server (cloud storage) + Website (web 
 
 ## Commands
 ```bash
-./test.sh                 # Run all pytest tests
-./run.sh                  # Run server, website, and client
-uv run pytest tests/ -v    # Run tests with verbose output
+./install.sh             # Install dependencies (run once)
+./test.sh                # Run all tests (unit + API + E2E)
+./run.sh                 # Run server, website, and client
 ```
 
 ## Server Commands
@@ -91,12 +91,16 @@ cd Website && uv run uvicorn main:app --reload --port 3112
 ## Testing
 ```bash
 ./test.sh                 # Run all tests (unit + API + E2E)
-python -m pytest tests/ -v  # Run all tests with verbose output
-python -m pytest tests/test_server_api.py -v  # Server API tests only
-python -m pytest tests/test_e2e.py -v  # E2E tests only
+.venv/bin/python -m pytest tests/test_server.py -v          # Unit tests only
+.venv/bin/python -m pytest tests/test_server_api.py -v     # Server API tests
+.venv/bin/python -m pytest tests/test_e2e.py -v            # E2E tests (requires playwright)
 ```
 
+- E2E tests require `playwright install chromium` (done by install.sh)
+- No lint/typecheck tools configured
+
 ## Version History
+- v0.8: Context menu (Save/Rename/Delete), custom dialogs, close tab prompts, relative path support
 - v0.7: Added menu bar (File/Edit/View/Help), keyboard shortcuts, modified file indicator
 - v0.6: Fixed Terminal WebSocket 403 issue, added terminal with command prompt
 - v0.5: Web-based code editor (Monaco Editor + xterm.js), HTTP API for file operations
