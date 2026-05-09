@@ -50,6 +50,11 @@ python -m Client.main --username ccc --password cccpass --folder ./sync
 - Files in `sync/public/` are uploaded as public
 - Access via `/api/public/files` or Website `/public`
 
+### Web Editor
+- Web-based code editor similar to VSCode (access at `/editor`)
+- Monaco Editor for multi-tab code editing
+- Integrated Terminal with real-time multiplexed PTY
+
 ## Run Tests
 ```bash
 ./test.sh

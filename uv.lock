@@ -46,7 +46,7 @@ wheels = [
 [[package]]
 name = "box5"
 version = "0.9.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },

@@ -100,6 +100,7 @@ cd Website && uv run uvicorn main:app --reload --port 3112
 - No lint/typecheck tools configured
 
 ## Version History
+- v0.9: PyPI distribution config (MANIFEST.in), terminal UI cleanup, multiple PTY session multiplexing, terminal websocket tests
 - v0.8: Context menu (Save/Rename/Delete), custom dialogs, close tab prompts, relative path support
 - v0.7: Added menu bar (File/Edit/View/Help), keyboard shortcuts, modified file indicator
 - v0.6: Fixed Terminal WebSocket 403 issue, added terminal with command prompt
