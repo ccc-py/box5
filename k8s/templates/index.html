@@ -147,9 +147,12 @@
                     <td>{{ file.created_at }}</td>
                     <td class="actions">
                         <a href="/history/{{ file.id }}">History</a>
-                        {% if file.filename.endswith('.md') or file.filename.endswith('.txt') or file.filename.endswith('.html') or file.filename.endswith('.jpg') or file.filename.endswith('.jpeg') or file.filename.endswith('.png') or file.filename.endswith('.gif') or file.filename.endswith('.webp') %}
+                        {% if file.filename.split('.')|length > 1 %}
+                        {% set ext = file.filename.split('.')|last %}
+                        {% if ext in ['md', 'txt', 'html', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf', 'py', 'js', 'ts', 'jsx', 'tsx', 'c', 'h', 'cpp', 'sh', 'go', 'rs', 'java', 'json', 'yaml', 'yml', 'xml', 'css'] %}
                         {% set view_path = current_folder + '/' + file.filename if current_folder else file.filename %}
                         <a href="/view/{{ view_path }}">View</a>
+                        {% endif %}
                         {% endif %}
                         <a href="/download/{{ file.id }}">Download</a>
                     </td>

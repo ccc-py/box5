@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     sqlite3 \
+    zsh \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv
@@ -12,7 +13,7 @@ RUN git clone https://github.com/ccc-py/box5.git /tmp/box5
 
 WORKDIR /tmp/box5
 
-RUN printf "fastapi>=0.100.0\nuvicorn>=0.23.0\npydantic>=2.0.0\npython-multipart>=0.0.6\nrequests>=2.31.0\nwatchdog>=4.0.0\nmarkdown>=3.5.0" > requirements.txt
+RUN printf "fastapi>=0.100.0\nuvicorn[standard]>=0.23.0\npydantic>=2.0.0\npython-multipart>=0.0.6\nrequests>=2.31.0\nwatchdog>=4.0.0\nmarkdown>=3.5.0" > requirements.txt
 
 RUN uv pip install --system -r requirements.txt
 

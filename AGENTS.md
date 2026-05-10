@@ -22,14 +22,24 @@ Multi-tenant version with isolated Docker containers per user.
 - Docker for container isolation
 - SQLite with WAL mode
 - uv for package management
+- WebSocket (uvicorn[standard]) for terminal
+- zsh for shell in containers
 
 ### Project Structure
 - `uploads/` — User files and sync folders
 - `containers/` — Container data
 - `templates/` — Jinja2 templates
 - `static/` — CSS/JS assets
-- `tests/` — pytest tests
+- `tests/` — pytest tests (unit, e2e, websocket)
 - `Dockerfile.box5` — User container image
+- `_doc/` — Version documentation
+
+### Features
+- Automatic container creation on user login
+- Volume mount syncs host files to container
+- Web editor with Monaco Editor + xterm.js terminal
+- File view: markdown, HTML, images, code blocks with syntax
+- WebSocket terminal with zsh shell
 
 ## Dev Rules (from plan.md)
 1. Write unit tests + system tests for all features

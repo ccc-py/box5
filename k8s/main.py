@@ -475,23 +475,27 @@ async def view_file(request: Request, path: str):
                 content = f.read()
             
             if ext == ".md":
-                import markdown
                 content = markdown.markdown(content)
                 return HTMLResponse(content=f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><style>
+<html><head><meta charset="utf-8"><title>{filename}</title><style>
 body{{font-family:system-ui;padding:20px;max-width:800px;margin:0 auto}}
 img{{max-width:100%}}pre{{background:#f5f5f5;padding:15px;border-radius:5px;overflow-x:auto}}
-</style></head><body>{content}</body></html>""")
+</style></head><body><h2>{path}</h2>{content}</body></html>""")
             elif ext == ".html":
                 return HTMLResponse(content=content, media_type="text/html")
             
-            code_exts = [".py", ".js", ".ts", ".c", ".h", ".cpp", ".sh", ".bash", ".zsh", ".go", ".rs", ".java", ".c", ".cs", ".rb", ".php", ".css", ".json", ".yaml", ".yml", ".xml", ".sql", ".r", ".swift", ".kt", ".scala", ".lua", ".pl", ".r", ".sh"]
+            code_exts = [".py", ".js", ".ts", ".c", ".h", ".cpp", ".sh", ".bash", ".zsh", ".go", ".rs", ".java", ".cs", ".rb", ".php", ".css", ".json", ".yaml", ".yml", ".xml", ".sql", ".swift", ".kt", ".scala", ".lua", ".pl"]
             if ext in code_exts or ext == ".txt":
+                lang = ext[1:] if ext != ".txt" else "text"
+                md_content = f"## {path}\n\n```{lang}\n{content}\n```"
+                html_content = markdown.markdown(md_content, extensions=['fenced_code'])
                 return HTMLResponse(content=f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>{filename}</title><style>
-body{{font-family:monospace;padding:20px;background:#1e1e1e;color:#d4d4d4}}
-pre{{margin:0;white-space:pre-wrap;word-wrap:break-word}}
-</style></head><body><pre>{content}</pre></body></html>""", media_type="text/html")
+body{{font-family:system-ui;padding:20px;max-width:800px;margin:0 auto}}
+h2{{margin-bottom:15px;padding-bottom:10px;border-bottom:1px solid #ddd}}
+pre{{background:#f5f5f5;padding:15px;border-radius:5px;overflow-x:auto}}
+code{{font-family:monospace}}
+</style></head><body>{html_content}</body></html>""", media_type="text/html")
             
             return HTMLResponse(content=f"<pre>{content}</pre>")
         
