@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 
 unset VIRTUAL_ENV
 
-VENV_PYTHON="./.venv/bin/python"
+VENV_PYTHON="$HOME/.venv/bin/python"
 
 echo "=== Running pytest (unit tests) ==="
 $VENV_PYTHON -m pytest tests/test_server.py tests/test_client.py tests/test_sync.py tests/test_website.py -v

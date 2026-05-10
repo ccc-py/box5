@@ -1,25 +1,29 @@
 FROM python:3.12-slim
 
-WORKDIR /app
-
 RUN apt-get update && apt-get install -y \
     git \
     curl \
+    sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv
 
-RUN git clone https://github.com/ccc-py/box5.git /tmp/box5 && \
-    cd /tmp/box5 && \
-    uv pip install --system -r requirements.txt && \
-    mv . /app && \
-    rm -rf /tmp/box5
+RUN git clone https://github.com/ccc-py/box5.git /tmp/box5
+
+WORKDIR /tmp/box5
+
+RUN printf "fastapi>=0.100.0\nuvicorn>=0.23.0\npydantic>=2.0.0\npython-multipart>=0.0.6\nrequests>=2.31.0\nwatchdog>=4.0.0\nmarkdown>=3.5.0" > requirements.txt
+
+RUN uv pip install --system -r requirements.txt
+
+WORKDIR /tmp/box5/Server
+
+COPY database_sqlite.py /tmp/box5/Server/database.py
 
 ENV PORT=3111
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/tmp/box5
+ENV DB_PATH=/data/uploads/ccc/box5.db
 
 EXPOSE 3111
 
-WORKDIR /app/Server
-
-CMD ["python", "main.py"]
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3111"]

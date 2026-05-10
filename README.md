@@ -4,14 +4,21 @@ A personal Dropbox-like app with Client (desktop sync), Server (cloud storage), 
 
 ## Quick Start
 
-### Start All Services
+### Start All Services (box5)
 ```bash
 ./run.sh
 ```
 - Server: http://localhost:3111
 - Website: http://localhost:3112
 
-### Manual Start
+### Start K8s Version (multi-tenant with Docker)
+```bash
+cd k8s
+./k8s_run.sh
+```
+- Web UI: http://localhost:8000
+
+### Manual Start (box5)
 ```bash
 # Server (port 3111)
 cd Server && uvicorn main:app --port 3111

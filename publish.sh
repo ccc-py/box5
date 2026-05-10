@@ -1,3 +1,3 @@
-python -m build
+uv run python -m build
 # twine upload --repository testpypi dist/*
 twine upload dist/*

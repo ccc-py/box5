@@ -7,7 +7,7 @@ unset VIRTUAL_ENV
 
 echo "Starting box5..."
 
-VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python"
+VENV_PYTHON="$HOME/.venv/bin/python"
 export SQL5_BINARY="$HOME/.cache/sql5/sql5-macos-arm64"
 
 echo "=== Starting Server on port 3111 ==="

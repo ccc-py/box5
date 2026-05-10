@@ -14,6 +14,23 @@ Dropbox-like app: Client (desktop sync) + Server (cloud storage) + Website (web 
 - `tests/` — pytest unit tests
 - `_doc/` — planning docs and version notes
 
+## K8s Version (k8s/)
+Multi-tenant version with isolated Docker containers per user.
+
+### Tech Stack
+- Python + FastAPI
+- Docker for container isolation
+- SQLite with WAL mode
+- uv for package management
+
+### Project Structure
+- `uploads/` — User files and sync folders
+- `containers/` — Container data
+- `templates/` — Jinja2 templates
+- `static/` — CSS/JS assets
+- `tests/` — pytest tests
+- `Dockerfile.box5` — User container image
+
 ## Dev Rules (from plan.md)
 1. Write unit tests + system tests for all features
 2. Create `test.sh` for project testing
@@ -100,6 +117,7 @@ cd Website && uv run uvicorn main:app --reload --port 3112
 - No lint/typecheck tools configured
 
 ## Version History
+- v1.1: box5-k8s multi-tenant version with Docker containers per user, automatic container creation, volume mount sync
 - v1.0: Full path-based routing (`/view/public/...`), native relative link resolution for static site behavior, Subfolder navigation fixes, and Python-layer deduplication.
 - v0.9: PyPI distribution config (MANIFEST.in), terminal UI cleanup, multiple PTY session multiplexing, terminal websocket tests
 - v0.8: Context menu (Save/Rename/Delete), custom dialogs, close tab prompts, relative path support
@@ -110,3 +128,11 @@ cd Website && uv run uvicorn main:app --reload --port 3112
 - v0.3: Automated testing (Server API + Playwright E2E) - 37 tests total
 - v0.2: Bug fixes (TemplateResponse API, sql5 binary path), .html view support
 - v0.1: Initial release with basic features
+
+## K8s Commands (k8s/)
+```bash
+cd k8s
+./k8s_run.sh          # Start k8s server on port 8000
+./test.sh             # Run all tests
+docker build -t box5-server:latest -f Dockerfile.box5 .  # Build Docker image
+```

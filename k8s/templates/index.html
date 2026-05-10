@@ -148,11 +148,8 @@
                     <td class="actions">
                         <a href="/history/{{ file.id }}">History</a>
                         {% if file.filename.endswith('.md') or file.filename.endswith('.txt') or file.filename.endswith('.html') or file.filename.endswith('.jpg') or file.filename.endswith('.jpeg') or file.filename.endswith('.png') or file.filename.endswith('.gif') or file.filename.endswith('.webp') %}
-                        {% if not public_view and file.folder %}
-                        <a href="/view/{{ file.folder }}/{{ file.filename }}">View</a>
-                        {% else %}
-                        <a href="/view/{{ file.filename }}">View</a>
-                        {% endif %}
+                        {% set view_path = current_folder + '/' + file.filename if current_folder else file.filename %}
+                        <a href="/view/{{ view_path }}">View</a>
                         {% endif %}
                         <a href="/download/{{ file.id }}">Download</a>
                     </td>
