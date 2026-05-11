@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>box5 — 個人雲端同步空間</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <span class="logo">box5</span>
+    <div class="nav-links">
+      <a href="#arch">架構</a>
+      <a href="#components">元件</a>
+      <a href="#stack">技術</a>
+      <a href="#start">快速開始</a>
+      <a href="https://github.com/ccc-py/box5" target="_blank">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-content">
+    <h1>box5</h1>
+    <p class="subtitle">Dropbox-like 個人雲端同步空間</p>
+    <p class="desc">Client 桌面同步 + Server 雲端儲存 + Website 網頁介面<br>多租戶 Docker 隔離版本（k8s）</p>
+    <div class="hero-buttons">
+      <a href="#start" class="btn btn-primary">快速開始</a>
+      <a href="#components" class="btn btn-secondary">認識元件</a>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section id="arch" class="section">
+  <h2>系統架構</h2>
+  <div class="arch-diagram">
+    <div class="arch-row">
+      <div class="arch-node">
+        <div class="arch-icon client-icon">🖥</div>
+        <div class="arch-label">Client</div>
+        <div class="arch-desc">桌面同步<br>watchdog 監控</div>
+      </div>
+      <div class="arch-arrow">⇄</div>
+      <div class="arch-node">
+        <div class="arch-icon server-icon">☁</div>
+        <div class="arch-label">Server</div>
+        <div class="arch-desc">FastAPI + sql5<br>RESTful API</div>
+      </div>
+      <div class="arch-arrow">⇄</div>
+      <div class="arch-node">
+        <div class="arch-icon web-icon">🌐</div>
+        <div class="arch-label">Website</div>
+        <div class="arch-desc">Jinja2 模板<br>SSR 渲染</div>
+      </div>
+    </div>
+    <div class="arch-row arch-row-k8s">
+      <div class="arch-node arch-node-wide">
+        <div class="arch-icon k8s-icon">🐳</div>
+        <div class="arch-label">k8s（多租戶）</div>
+        <div class="arch-desc">Docker 容器隔離 · 每個使用者獨立 Server</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="components" class="section section-alt">
+  <h2>元件說明</h2>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-header server">
+        <span class="card-icon">☁</span>
+        <h3>Server</h3>
+      </div>
+      <div class="card-body">
+        <p>FastAPI 後端伺服器，提供使用者認證與檔案 CRUD API。</p>
+        <ul>
+          <li>JWT 無狀態認證</li>
+          <li>sql5 資料庫（WebSocket 傳輸）</li>
+          <li>檔案版本歷史</li>
+          <li>公開檔案分享</li>
+          <li>WebSocket 編輯器後端</li>
+        </ul>
+        <div class="card-cmd">cd Server && uv run uvicorn main:app --port 3111</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header client">
+        <span class="card-icon">🖥</span>
+        <h3>Client</h3>
+      </div>
+      <div class="card-body">
+        <p>桌面同步客戶端，監控本機資料夾自動同步至雲端。</p>
+        <ul>
+          <li>watchdog 即時監控</li>
+          <li>MD5 雜湊去重</li>
+          <li>支援 public/ 公開資料夾</li>
+          <li>初始完整同步</li>
+        </ul>
+        <div class="card-cmd">uv run python -m Client.main --username USER --password PASS</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header web">
+        <span class="card-icon">🌐</span>
+        <h3>Website</h3>
+      </div>
+      <div class="card-body">
+        <p>網頁介面，支援檔案瀏覽、檢視與線上編輯。</p>
+        <ul>
+          <li>Jinja2 伺服器端渲染</li>
+          <li>Markdown / 圖片 / HTML 檢視</li>
+          <li>Monaco Editor 程式碼編輯器</li>
+          <li>xterm.js 終端機</li>
+          <li>檔案版本歷史瀏覽</li>
+        </ul>
+        <div class="card-cmd">cd Website && uv run uvicorn main:app --port 3112</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header k8s">
+        <span class="card-icon">🐳</span>
+        <h3>k8s（多租戶）</h3>
+      </div>
+      <div class="card-body">
+        <p>多租戶版本，每個使用者獨立的 Docker 容器。</p>
+        <ul>
+          <li>Docker 容器隔離</li>
+          <li>自動容器建立</li>
+          <li>Volume Mount 同步</li>
+          <li>SQLite WAL 模式</li>
+          <li>內建 vim + code5（AI 編碼助手）</li>
+        </ul>
+        <div class="card-cmd">cd k8s && ./k8s_run.sh</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="stack" class="section">
+  <h2>技術棧</h2>
+  <div class="stack-grid">
+    <div class="stack-item"><span class="stack-tag py">Python</span> 開發語言</div>
+    <div class="stack-item"><span class="stack-tag fastapi">FastAPI</span> Web 框架</div>
+    <div class="stack-item"><span class="stack-tag sql5">sql5</span> 資料庫</div>
+    <div class="stack-item"><span class="stack-tag docker">Docker</span> 容器隔離</div>
+    <div class="stack-item"><span class="stack-tag ws">WebSocket</span> 即時通訊</div>
+    <div class="stack-item"><span class="stack-tag uv">uv</span> 套件管理</div>
+    <div class="stack-item"><span class="stack-tag jinja">Jinja2</span> 模板引擎</div>
+    <div class="stack-item"><span class="stack-tag pydantic">Pydantic</span> 資料驗證</div>
+    <div class="stack-item"><span class="stack-tag pytest">pytest</span> 測試框架</div>
+    <div class="stack-item"><span class="stack-tag playwright">Playwright</span> E2E 測試</div>
+  </div>
+</section>
+
+<section id="start" class="section section-alt">
+  <h2>快速開始</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <h3>安裝相依套件</h3>
+        <div class="code-block">./install.sh</div>
+        <p>使用 uv 自動安裝所有 Python 相依套件與 Playwright 瀏覽器。</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <h3>執行全部服務</h3>
+        <div class="code-block">./run.sh</div>
+        <p>同時啟動 Server（port 3111）、Website（port 3112）與 Client。</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <h3>執行測試</h3>
+        <div class="code-block">./test.sh</div>
+        <p>執行單元測試、API 測試與 E2E 測試。</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <h3>啟動 k8s 多租戶版本</h3>
+        <div class="code-block">cd k8s && ./k8s_run.sh</div>
+        <p>啟動多租戶 Docker 容器版本（port 8000）。預設帳號：ccc / cccpass</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>專案結構</h2>
+  <div class="file-tree">
+    <div class="tree-item folder">📁 box5/</div>
+    <div class="tree-item folder child">📁 Server/ — FastAPI 伺服器 + sql5</div>
+    <div class="tree-item folder child">📁 Client/ — 桌面同步客戶端</div>
+    <div class="tree-item folder child">📁 Website/ — 網頁 UI</div>
+    <div class="tree-item folder child">📁 k8s/ — 多租戶 Docker 版本</div>
+    <div class="tree-item folder child">📁 tests/ — pytest 測試</div>
+    <div class="tree-item folder child">📁 _doc/ — 版本規劃文件</div>
+    <div class="tree-item folder child">📁 _wiki/ — 技術詞彙說明</div>
+    <div class="tree-item folder child">📁 sync/ — 同步資料夾範例</div>
+    <div class="tree-item file child">📄 AGENTS.md — AI 輔助說明</div>
+    <div class="tree-item file child">📄 install.sh — 安裝腳本</div>
+    <div class="tree-item file child">📄 test.sh — 測試腳本</div>
+    <div class="tree-item file child">📄 run.sh — 啟動腳本</div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <p>box5 — 以 MIT 授權釋出</p>
+    <p><a href="https://github.com/ccc-py/box5" target="_blank">GitHub</a></p>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
