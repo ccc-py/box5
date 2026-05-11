@@ -8,6 +8,7 @@ from Client.api import ApiClient
 from Client.config import SYNC_FOLDER
 
 class SyncHandler(FileSystemEventHandler):
+    """檔案系統事件處理器，監控本機資料夾變動並同步至伺服器"""
     def __init__(self, api_client: ApiClient, sync_folder: str = SYNC_FOLDER):
         self.api = api_client
         self.sync_folder = sync_folder
@@ -15,12 +16,14 @@ class SyncHandler(FileSystemEventHandler):
         self.file_hashes: dict = {}
 
     def _get_file_hash(self, filepath: str) -> str:
+        """計算檔案的 MD5 雜湊值，用於比對檔案是否確實被修改過"""
         if not os.path.exists(filepath):
             return ""
         with open(filepath, "rb") as f:
             return hashlib.md5(f.read()).hexdigest()
 
     def _should_sync(self, filepath: str) -> bool:
+        """判斷檔案是否應該同步（排除目錄與隱藏檔）"""
         if not os.path.isfile(filepath):
             return False
         rel_path = os.path.relpath(filepath, self.sync_folder)
@@ -29,10 +32,12 @@ class SyncHandler(FileSystemEventHandler):
         return True
 
     def _is_public(self, filepath: str) -> bool:
+        """判斷檔案是否位於 public/ 子資料夾下"""
         rel_path = os.path.relpath(filepath, self.sync_folder)
         return rel_path.startswith("public" + os.sep) or rel_path.startswith("public/")
 
     def _get_folder(self, filepath: str) -> str:
+        """從檔案路徑中取出相對的資料夾路徑"""
         rel_path = os.path.relpath(filepath, self.sync_folder)
         folder = os.path.dirname(rel_path)
         return folder if folder != "." else ""

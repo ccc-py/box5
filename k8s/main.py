@@ -62,10 +62,12 @@ def get_client():
 
 
 def get_container_name(username: str) -> str:
+    """根據使用者名稱產生對應的 Docker 容器名稱"""
     return f"box5-{username}"
 
 
 def get_user_port(username: str) -> int:
+    """根據使用者名稱的雜湊值產生連接埠號（已棄用，改用實際 port mapping）"""
     return hash(username) % 10000 + 20000
 
 
@@ -75,6 +77,7 @@ class LoginRequest(BaseModel):
 
 
 def create_user_container(username: str, password: str) -> bool:
+    """為使用者建立 Docker 容器，設定環境變數與 Volume Mount，並等待 API 就緒後註冊使用者"""
     container_name = get_container_name(username)
     user_port = get_user_port(username)
     user_dir = os.path.join(UPLOAD_DIR, username)
@@ -183,6 +186,7 @@ def create_user_container(username: str, password: str) -> bool:
 
 
 def get_user_server_url(username: str) -> str:
+    """取得使用者容器的完整伺服器 URL"""
     user_port = get_user_port(username)
     return f"http://{BASE_HOST}:{user_port}"
 
@@ -213,6 +217,7 @@ def get_user_api(username: str) -> str:
 
 
 def stop_user_container(username: str) -> bool:
+    """停止使用者的 Docker 容器"""
     container_name = get_container_name(username)
     try:
         container = get_client().containers.get(container_name)
@@ -226,6 +231,7 @@ def stop_user_container(username: str) -> bool:
 
 
 def delete_user_container(username: str) -> bool:
+    """強制移除使用者的 Docker 容器"""
     container_name = get_container_name(username)
     try:
         container = get_client().containers.get(container_name)
@@ -239,6 +245,7 @@ def delete_user_container(username: str) -> bool:
 
 
 def check_container_status(username: str) -> str:
+    """查詢使用者容器的目前狀態（running/not_found/docker_unavailable/error）"""
     container_name = get_container_name(username)
     try:
         container = get_client().containers.get(container_name)

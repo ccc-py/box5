@@ -7,6 +7,16 @@ Dropbox-like app: Client (desktop sync) + Server (cloud storage) + Website (web 
 - Development: uv (Python package manager)
 - sql5 source: `/Users/Shared/ccc/project/sql5`
 
+## Documentation
+Each module has `.md` files explaining the theory and background:
+- `Server/*.md` — Server module documentation
+- `Client/*.md` — Client module documentation
+- `Website/*.md` — Website module documentation
+- `k8s/*.md` — K8s module documentation
+- `tests/README.md` — Testing overview
+- `_doc/` — Planning docs, version notes, and todo list
+- `_wiki/` — Technology wiki (Docker, FastAPI, WebSocket, JWT, etc.)
+
 ## Project Structure
 - `Server/` — FastAPI server with sql5 database
 - `Client/` — Desktop sync client using watchdog

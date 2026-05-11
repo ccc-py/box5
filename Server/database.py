@@ -11,6 +11,7 @@ _websocket_process = None
 _server_started = False
 
 def start_websocket_server():
+    """啟動 sql5 的 WebSocket 伺服器，監聽 8080 埠，提供持久資料庫連線"""
     global _websocket_process, _server_started
     if _server_started and _websocket_process is not None:
         return
@@ -28,6 +29,7 @@ def start_websocket_server():
     _server_started = True
 
 def get_db():
+    """透過 WebSocket 協定連線到 sql5 資料庫，回傳資料庫連線物件"""
     start_websocket_server()
     db = sql5.connect(
         path=DB_PATH,
@@ -38,6 +40,7 @@ def get_db():
     return db
 
 def init_db():
+    """初始化資料庫，建立使用者和檔案兩張資料表（若尚未存在）"""
     start_websocket_server()
     time.sleep(1)
     db = sql5.connect(

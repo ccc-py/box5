@@ -7,17 +7,25 @@ import asyncio
 import xml.etree.ElementTree as ET
 
 class ConnectionManager:
+    """管理 WebSocket 連線與對應的終端機行程
+
+    - active_connections: 每個客戶端對應的 WebSocket 連線
+    - shell_processes: 每個連線或終端機視窗對應的 shell 行程資訊
+    - shell_readers: 非同步讀取終端機輸出的任務
+    """
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
         self.shell_processes: Dict[str, Any] = {}
         self.shell_readers: Dict[str, Any] = {}
 
     async def connect(self, websocket: WebSocket, client_id: str):
+        """註冊新的 WebSocket 連線"""
         self.active_connections[client_id] = websocket
         self.shell_processes[client_id] = None
         self.shell_readers[client_id] = None
 
     def disconnect(self, client_id: str):
+        """中斷連線時清理所有相關資源，包含關閉偽終端機與終止行程"""
         if client_id in self.active_connections:
             del self.active_connections[client_id]
             
