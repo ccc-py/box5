@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     sqlite3 \
     zsh \
+    vim \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv
@@ -16,6 +17,8 @@ WORKDIR /tmp/box5
 RUN printf "fastapi>=0.100.0\nuvicorn[standard]>=0.23.0\npydantic>=2.0.0\npython-multipart>=0.0.6\nrequests>=2.31.0\nwatchdog>=4.0.0\nmarkdown>=3.5.0" > requirements.txt
 
 RUN uv pip install --system -r requirements.txt
+
+RUN uv pip install --system code5
 
 WORKDIR /tmp/box5/Server
 

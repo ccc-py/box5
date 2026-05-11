@@ -209,9 +209,9 @@ class TestContainerStatus:
 
 class TestDirectoryCreation:
 
-    @patch('main.os.makedirs')
     @patch('main.get_client')
-    def test_create_container_creates_directories(self, mock_get_client, mock_makedirs):
+    def test_create_container_creates_directories(self, mock_get_client):
+        import os
         mock_client = MagicMock()
         mock_container = MagicMock()
         mock_container.ports = {'3111/tcp': [{'HostPort': '52001'}]}
@@ -220,7 +220,6 @@ class TestDirectoryCreation:
         mock_get_client.return_value = mock_client
 
         from main import create_user_container
-        import os
         user_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'newuser')
         os.makedirs(user_dir, exist_ok=True)
         try:

@@ -106,13 +106,16 @@ def create_user_container(username: str, password: str) -> bool:
         pass
 
     try:
+        nvidia_key = os.environ.get("NVIDIA_API_KEY", "")
         env_vars = [
             f"USERNAME={username}",
             f"PASSWORD={password}",
             f"PORT={SERVER_PORT}",
             f"UPLOAD_DIR=/data/uploads/{username}",
-            f"DB_PATH=/data/uploads/{username}/box5.db"
+            f"DB_PATH=/data/uploads/{username}/box5.db",
         ]
+        if nvidia_key:
+            env_vars.append(f"NVIDIA_API_KEY={nvidia_key}")
 
         container = get_client().containers.run(
             CONTAINER_IMAGE,
@@ -170,6 +173,11 @@ def create_user_container(username: str, password: str) -> bool:
                 print(f"Registration attempt {attempt+1} failed: {e}")
                 time.sleep(2)
         
+        port_file = os.path.join(user_dir, ".port")
+        with open(port_file, "w") as f:
+            f.write(str(user_port))
+        print(f"Saved port {user_port} to {port_file}")
+
         import shutil
         sync_src = os.path.join(CONTAINER_DIR, username, "sync")
         sync_dest = os.path.join(user_dir, "sync")
