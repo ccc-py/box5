@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Container Management - Box5 Admin</title>
+    <link rel="stylesheet" href="/static/box5.css">
+    <style>
+        body { font-family: system-ui; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .nav { display: flex; gap: 15px; margin-bottom: 20px; padding: 10px; background: white; border-radius: 8px; }
+        .nav a { text-decoration: none; color: #0066cc; padding: 8px 16px; border-radius: 4px; }
+        .nav a:hover { background: #f0f0f0; }
+        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f9f9f9; color: #666; font-weight: 600; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+        .badge-success { background: #d4edda; color: #155724; }
+        .badge-warning { background: #fff3cd; color: #856404; }
+        .badge-danger { background: #f8d7da; color: #721c24; }
+        .badge-info { background: #e7f3ff; color: #0066cc; }
+        .actions { display: flex; gap: 8px; }
+        .actions button { padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .btn-restart { background: #e7f3ff; color: #0066cc; }
+        .btn-delete { background: #f8d7da; color: #721c24; }
+        .btn-logs { background: #f0f0f0; color: #333; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        .modal.show { display: flex; }
+        .modal-content { background: white; padding: 30px; border-radius: 8px; max-width: 700px; width: 90%; max-height: 80vh; overflow: auto; }
+        .modal-content h2 { margin-top: 0; }
+        .modal-content pre { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; max-height: 400px; overflow: auto; font-size: 12px; white-space: pre-wrap; }
+        .modal-content button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; background: #f0f0f0; margin-top: 10px; }
+        .loading { color: #666; text-align: center; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav">
+            <a href="/admin">Dashboard</a>
+            <a href="/admin/users">Users</a>
+            <a href="/admin/containers">Containers</a>
+            <a href="/">Back to Files</a>
+        </div>
+
+        <h1>Container Management</h1>
+
+        <div class="panel">
+            <table>
+                <thead>
+                    <tr><th>Name</th><th>Username</th><th>Status</th><th>Created</th><th>Actions</th></tr>
+                </thead>
+                <tbody id="containers-table">
+                    <tr><td colspan="5" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="modal" id="logs-modal">
+        <div class="modal-content">
+            <h2>Container Logs: <span id="logs-container-name"></span></h2>
+            <pre id="logs-content">Loading...</pre>
+            <button onclick="closeLogsModal()">Close</button>
+        </div>
+    </div>
+
+    <script>
+    let currentUsername = '';
+
+    async function loadContainers() {
+        const token = document.cookie.split('; ').find(r => r.startsWith('token='))?.split('=')[1];
+        if (!token) { window.location.href = '/login'; return; }
+
+        try {
+            const resp = await fetch('/api/admin/containers', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (resp.status === 401 || resp.status === 403) { window.location.href = '/login'; return; }
+            const data = await resp.json();
+
+            const tbody = document.getElementById('containers-table');
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5">No containers found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(c => `
+                <tr>
+                    <td>${c.name}</td>
+                    <td>${c.username}</td>
+                    <td><span class="badge ${c.status === 'running' ? 'badge-success' : c.status === 'exited' ? 'badge-warning' : 'badge-danger'}">${c.status}</span></td>
+                    <td>${c.created ? new Date(c.created).toLocaleString() : '-'}</td>
+                    <td class="actions">
+                        ${c.status === 'running' ? `<button class="btn-restart" onclick="restartContainer('${c.username}')">Restart</button>` : ''}
+                        <button class="btn-logs" onclick="viewLogs('${c.username}')">Logs</button>
+                        <button class="btn-delete" onclick="deleteContainer('${c.username}')">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function restartContainer(username) {
+        if (!confirm(`Restart container ${username}?`)) return;
+        const token = document.cookie.split('; ').find(r => r.startsWith('token='))?.split('=')[1];
+        const resp = await fetch(`/api/admin/containers/${username}/restart`, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (resp.ok) {
+            alert('Container restarted');
+            loadContainers();
+        }
+    }
+
+    async function deleteContainer(username) {
+        if (!confirm(`Delete container ${username}?`)) return;
+        const token = document.cookie.split('; ').find(r => r.startsWith('token='))?.split('=')[1];
+        await fetch(`/api/admin/containers/${username}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        loadContainers();
+    }
+
+    async function viewLogs(username) {
+        currentUsername = username;
+        document.getElementById('logs-container-name').textContent = username;
+        document.getElementById('logs-content').textContent = 'Loading...';
+        document.getElementById('logs-modal').classList.add('show');
+
+        const token = document.cookie.split('; ').find(r => r.startsWith('token='))?.split('=')[1];
+        const resp = await fetch(`/api/admin/containers/${username}/logs?lines=200`, {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await resp.json();
+        document.getElementById('logs-content').textContent = data.logs || 'No logs available';
+    }
+
+    function closeLogsModal() { document.getElementById('logs-modal').classList.remove('show'); }
+
+    loadContainers();
+    </script>
+</body>
+</html>

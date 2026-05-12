@@ -11,6 +11,7 @@ import requests
 import markdown
 
 import auth
+import admin as admin_module
 from database_sqlite import get_db, init_db
 import mail as email_module
 
@@ -923,6 +924,169 @@ async def reset_password_submit(request: Request, token: str = Form(...), passwo
         print(f"Warning: Could not sync container password: {e}")
 
     return templates.TemplateResponse(request=request, name="reset-password.html", context={"success": True})
+
+
+@app.post("/reset-password")
+async def reset_password_submit(request: Request, token: str = Form(...), password: str = Form(...), confirm: str = Form(...)):
+    user = auth.get_user_by_reset_token(token)
+    if not user:
+        return templates.TemplateResponse(request=request, name="reset-password.html", context={"expired": True})
+    if password != confirm:
+        return templates.TemplateResponse(request=request, name="reset-password.html", context={"token": token, "error": "Passwords do not match"})
+    if len(password) < 6:
+        return templates.TemplateResponse(request=request, name="reset-password.html", context={"token": token, "error": "Password must be at least 6 characters"})
+
+    auth.update_user_password(user["id"], password)
+    auth.clear_reset_token(user["id"])
+
+    try:
+        import docker as docker_lib
+        container_name = f"box5-{user['username']}"
+        client = docker_lib.from_env()
+        container = client.containers.get(container_name)
+        container.exec_run(f"bash -c 'echo {user['username']}:{password} | chpasswd'")
+    except Exception as e:
+        print(f"Warning: Could not sync container password: {e}")
+
+    return templates.TemplateResponse(request=request, name="reset-password.html", context={"success": True})
+
+
+def require_admin(request: Request):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        raise HTTPException(status_code=401, detail="No token")
+    payload = auth.decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if not admin_module.is_admin_user(int(payload["sub"])):
+        raise HTTPException(status_code=403, detail="Admin required")
+    return int(payload["sub"])
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request):
+    try:
+        require_admin(request)
+    except HTTPException:
+        return RedirectResponse(url="/login")
+    return templates.TemplateResponse(request=request, name="admin/dashboard.html")
+
+
+@app.get("/admin/users", response_class=HTMLResponse)
+async def admin_users_page(request: Request):
+    try:
+        require_admin(request)
+    except HTTPException:
+        return RedirectResponse(url="/login")
+    page = int(request.query_params.get("page", 1))
+    search = request.query_params.get("search", "")
+    sort_by = request.query_params.get("sort_by", "created_at")
+    order = request.query_params.get("order", "desc")
+    result = admin_module.get_all_users(page, 20, search, sort_by, order)
+    return templates.TemplateResponse(request=request, name="admin/users.html", context={**result})
+
+
+@app.get("/api/admin/dashboard")
+async def api_admin_dashboard(request: Request):
+    require_admin(request)
+    return admin_module.get_dashboard_stats()
+
+
+@app.get("/api/admin/users")
+async def api_admin_users(request: Request):
+    require_admin(request)
+    page = int(request.query_params.get("page", 1))
+    search = request.query_params.get("search", "")
+    sort_by = request.query_params.get("sort_by", "created_at")
+    order = request.query_params.get("order", "desc")
+    return admin_module.get_all_users(page, 20, search, sort_by, order)
+
+
+@app.get("/api/admin/users/{user_id}")
+async def api_admin_user_detail(request: Request, user_id: int):
+    require_admin(request)
+    user = admin_module.get_user_detail(user_id)
+    if not user:
+        return JSONResponse({"error": "User not found"}, status_code=404)
+    return user
+
+
+@app.put("/api/admin/users/{user_id}")
+async def api_admin_update_user(request: Request, user_id: int):
+    require_admin(request)
+    try:
+        body = await request.json()
+    except:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+    admin_module.update_user(user_id,
+        quota_gb=body.get("quota_gb"),
+        is_active=int(body.get("is_active", 1)),
+        is_admin=int(body.get("is_admin", 0)),
+    )
+    return {"message": "User updated"}
+
+
+@app.delete("/api/admin/users/{user_id}")
+async def api_admin_delete_user(request: Request, user_id: int):
+    require_admin(request)
+    ok = admin_module.delete_user(user_id)
+    if not ok:
+        return JSONResponse({"error": "User not found"}, status_code=404)
+    return {"message": "User deleted"}
+
+
+@app.post("/api/admin/users/{user_id}/reset-password")
+async def api_admin_reset_password(request: Request, user_id: int):
+    require_admin(request)
+    try:
+        body = await request.json()
+    except:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+    new_password = body.get("password", "")
+    if len(new_password) < 6:
+        return JSONResponse({"error": "Password must be at least 6 characters"}, status_code=400)
+    ok = admin_module.reset_user_password(user_id, new_password)
+    if not ok:
+        return JSONResponse({"error": "User not found"}, status_code=404)
+    return {"message": "Password reset"}
+
+
+@app.get("/api/admin/containers")
+async def api_admin_containers(request: Request):
+    require_admin(request)
+    return admin_module.get_all_containers()
+
+
+@app.post("/api/admin/containers/{username}/restart")
+async def api_admin_restart_container(request: Request, username: str):
+    require_admin(request)
+    ok = admin_module.restart_container(username)
+    if not ok:
+        return JSONResponse({"error": "Container not found"}, status_code=404)
+    return {"message": "Container restarted"}
+
+
+@app.delete("/api/admin/containers/{username}")
+async def api_admin_delete_container(request: Request, username: str):
+    require_admin(request)
+    admin_module.delete_container(username)
+    return {"message": "Container deleted"}
+
+
+@app.get("/api/admin/containers/{username}/logs")
+async def api_admin_container_logs(request: Request, username: str, lines: int = 100):
+    require_admin(request)
+    logs = admin_module.get_container_logs(username, lines)
+    return {"logs": logs}
+
+
+@app.get("/admin/containers", response_class=HTMLResponse)
+async def admin_containers_page(request: Request):
+    try:
+        require_admin(request)
+    except HTTPException:
+        return RedirectResponse(url="/login")
+    return templates.TemplateResponse(request=request, name="admin/containers.html")
 
 
 if __name__ == "__main__":

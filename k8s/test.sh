@@ -36,10 +36,14 @@ echo ""
 echo "=== Running unit tests ==="
 VENV_PYTHON="$HOME/.venv/bin/python"
 [ ! -f "$VENV_PYTHON" ] && VENV_PYTHON="python3"
+cd /Users/Shared/ccc/project/box5/k8s
+export DB_PATH="/Users/Shared/ccc/project/box5/k8s/box5.db"
 
 $VENV_PYTHON -m pytest tests/test_main.py -v
 $VENV_PYTHON -m pytest tests/test_auth.py -v
 $VENV_PYTHON -m pytest tests/test_auth_api.py -v
+$VENV_PYTHON -m pytest tests/test_admin.py -v
+$VENV_PYTHON -m pytest tests/test_admin_api.py -v
 
 echo ""
 echo "=== Starting server for e2e tests ==="

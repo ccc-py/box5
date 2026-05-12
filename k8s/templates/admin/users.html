@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>User Management - Box5 Admin</title>
+    <link rel="stylesheet" href="/static/box5.css">
+    <style>
+        body { font-family: system-ui; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .nav { display: flex; gap: 15px; margin-bottom: 20px; padding: 10px; background: white; border-radius: 8px; }
+        .nav a { text-decoration: none; color: #0066cc; padding: 8px 16px; border-radius: 4px; }
+        .nav a:hover { background: #f0f0f0; }
+        .search-bar { display: flex; gap: 10px; margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; }
+        .search-bar input { flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; }
+        .search-bar select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; }
+        .search-bar button { padding: 8px 16px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f9f9f9; color: #666; font-weight: 600; cursor: pointer; }
+        th a { text-decoration: none; color: #666; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+        .badge-success { background: #d4edda; color: #155724; }
+        .badge-warning { background: #fff3cd; color: #856404; }
+        .badge-danger { background: #f8d7da; color: #721c24; }
+        .actions { display: flex; gap: 8px; }
+        .actions button { padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .btn-edit { background: #e7f3ff; color: #0066cc; }
+        .btn-delete { background: #f8d7da; color: #721c24; }
+        .btn-reset { background: #fff3cd; color: #856404; }
+        .pagination { display: flex; gap: 5px; align-items: center; justify-content: center; margin-top: 20px; }
+        .pagination a, .pagination span { padding: 6px 12px; border-radius: 4px; text-decoration: none; color: #333; }
+        .pagination a { background: #f0f0f0; }
+        .pagination .current { background: #0066cc; color: white; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        .modal.show { display: flex; }
+        .modal-content { background: white; padding: 30px; border-radius: 8px; max-width: 400px; width: 90%; }
+        .modal-content h2 { margin-top: 0; }
+        .modal-content label { display: block; margin-bottom: 5px; font-weight: 600; }
+        .modal-content input, .modal-content select { width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .modal-content button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; }
+        .modal-content .btn-save { background: #0066cc; color: white; }
+        .modal-content .btn-cancel { background: #f0f0f0; margin-left: 10px; }
+        .loading { color: #666; text-align: center; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav">
+            <a href="/admin">Dashboard</a>
+            <a href="/admin/users">Users</a>
+            <a href="/admin/containers">Containers</a>
+            <a href="/">Back to Files</a>
+        </div>
+
+        <h1>User Management</h1>
+
+        <div class="search-bar">
+            <input type="text" id="search" placeholder="Search by username or email...">
+            <select id="sort_by">
+                <option value="created_at">Sort: Joined</option>
+                <option value="username">Username</option>
+                <option value="last_login">Last Login</option>
+                <option value="disk_usage_bytes">Disk Usage</option>
+            </select>
+            <select id="order">
+                <option value="desc">Descending</option>
+                <option value="asc">Ascending</option>
+            </select>
+            <button onclick="loadUsers(1)">Search</button>
+        </div>
+
+        <div class="panel">
+            <table>
+                <thead>
+                    <tr>
+                        <th><a href="#" onclick="toggleSort('username')">Username</a></th>
+                        <th>Email</th>
+                        <th><a href="#" onclick="toggleSort('created_at')">Joined</a></th>
+                        <th><a href="#" onclick="toggleSort('last_login')">Last Login</a></th>
+                        <th><a href="#" onclick="toggleSort('disk_usage_bytes')">Disk</a></th>
+                        <th>Quota</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="users-table">
+                    <tr><td colspan="8" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="edit-modal">
+        <div class="modal-content">
+            <h2>Edit User</h2>
+            <input type="hidden" id="edit-user-id">
+            <label>Quota (GB)</label>
+            <input type="number" id="edit-quota" min="1" max="1000">
+            <label>Active</label>
+            <select id="edit-active">
+                <option value="1">Active</option>
+                <option value="0">Inactive</option>
+            </select>
+            <label>Admin</label>
+            <select id="edit-admin">
+                <option value="0">No</option>
+                <option value="1">Yes</option>
+            </select>
+            <button class="btn-save" onclick="saveUser()">Save</button>
+            <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+        </div>
+    </div>
+
+    <div class="modal" id="reset-modal">
+        <div class="modal-content">
+            <h2>Reset Password</h2>
+            <input type="hidden" id="reset-user-id">
+            <label>New Password</label>
+            <input type="password" id="reset-password" placeholder="Min 6 characters">
+            <button class="btn-save" onclick="resetPassword()">Reset</button>
+            <button class="btn-cancel" onclick="closeResetModal()">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+    let currentSort = 'created_at';
+    let currentOrder = 'desc';
+
+    function toggleSort(col) {
+        if (currentSort === col) {
+            currentOrder = currentOrder === 'desc' ? 'asc' : 'desc';
+        } else {
+            currentSort = col;
+            currentOrder = 'desc';
+        }
+        loadUsers(1);
+    }
+
+    async function loadUsers(page) {
+        const token = document.cookie.split('; ').find(r => r.startsWith('token='))?.split('=')[1];
+        if (!token) { window.location.href = '/login'; return; }
+        const search = document.getElementById('search').value;
+        document.getElementById('sort_by').value = currentSort;
+        document.getElementById('order').value = currentOrder;
+
+        try {
+            const resp = await fetch(`/api/admin/users?page=${page}&search=${encodeURIComponent(search)}&sort_by=${currentSort}&order=${currentOrder}`, {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (resp.status === 401 || resp.status === 403) { window.location.href = '/login'; return; }
+            const data = await resp.json();
+
+            const tbody = document.getElementById('users-table');
+            if (data.users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8">No users found</td></tr>';
+            } else {
+                tbody.innerHTML = data.users.map(u => `
+                    <tr>
+                        <td>${u.username}</td>
+                        <td>${u.email || '-'}</td>
+                        <td>${new Date(u.created_at).toLocaleDateString()}</td>
+                        <td>${u.last_login ? new Date(u.last_login).toLocaleDateString() : '-'}</td>
+                        <td>${formatBytes(u.disk_usage_bytes || 0)}</td>
+                        <td>${u.quota_gb} GB</td>
+                        <td>
+                            <span class="badge ${u.is_active ? 'badge-success' : 'badge-danger'}">${u.is_active ? 'Active' : 'Inactive'}</span>
+                            ${u.is_admin ? '<span class="badge badge-warning">Admin</span>' : ''}
+                            ${u.email && !u.email_verified ? '<span class="badge badge-warning">Unverified</span>' : ''}
+                        </td>
+                        <td class="actions">
+                            <button class="btn-edit" onclick="openEditModal(${u.id}, ${u.quota_gb}, ${u.is_active ? 1 : 0}, ${u.is_admin ? 1 : 0})">Edit</button>
+                            <button class="btn-reset" onclick="openResetModal(${u.id})">Reset Pass</button>
+                            <button class="btn-delete" onclick="deleteUser(${u.id})">Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+
+            const pg = document.getElementById('pagination');
+            let html = '';
+            if (data.pages > 1) {
+                if (page > 1) html += `<a href="#" onclick="loadUsers(${page-1}); return false;">Prev</a>`;
+                html += `<span class="current">Page ${page} of ${data.pages}</span>`;
+                if (page < data.pages) html += `<a href="#" onclick="loadUsers(${page+1}); return false;">Next</a>`;
+            }
+            pg.innerHTML = html;
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function openEditModal(id, quota, isActive, isAdmin) {
+        document.getElementById('edit-user-id').value = id;
+        document.getElementById('edit-quota').value = quota;
+        document.getElementById('edit-active').value = isActive;
+        document.getElementById('edit-admin').value = isAdmin;
+        document.getElementById('edit-modal').classList.add('show');
+    }
+
+    function closeModal() { document.getElementById('edit-modal').classList.remove('show'); }
+
+    async function saveUser() {
+        const token = document.cookie.split('; ').find(r => r.startsWith('token='))?.split('=')[1];
+        const id = document.getElementById('edit-user-id').value;
+        const quota = document.getElementById('edit-quota').value;
+        const isActive = document.getElementById('edit-active').value;
+        const isAdmin = document.getElementById('edit-admin').value;
+        await fetch(`/api/admin/users/${id}`, {
+            method: 'PUT',
+            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quota_gb: parseInt(quota), is_active: parseInt(isActive), is_admin: parseInt(isAdmin) })
+        });
+        closeModal();
+        loadUsers(1);
+    }
+
+    function openResetModal(id) {
+        document.getElementById('reset-user-id').value = id;
+        document.getElementById('reset-password').value = '';
+        document.getElementById('reset-modal').classList.add('show');
+    }
+
+    function closeResetModal() { document.getElementById('reset-modal').classList.remove('show'); }
+
+    async function resetPassword() {
+        const token = document.cookie.split('; ').find(r => r.startsWith('token='))?.split('=')[1];
+        const id = document.getElementById('reset-user-id').value;
+        const pass = document.getElementById('reset-password').value;
+        if (pass.length < 6) { alert('Password must be at least 6 characters'); return; }
+        await fetch(`/api/admin/users/${id}/reset-password`, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pass })
+        });
+        closeResetModal();
+        alert('Password reset successfully');
+    }
+
+    async function deleteUser(id) {
+        if (!confirm('Delete this user and their container?')) return;
+        const token = document.cookie.split('; ').find(r => r.startsWith('token='))?.split('=')[1];
+        await fetch(`/api/admin/users/${id}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+        loadUsers(1);
+    }
+
+    loadUsers(1);
+    </script>
+</body>
+</html>
