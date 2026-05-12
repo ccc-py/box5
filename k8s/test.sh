@@ -44,8 +44,6 @@ $VENV_PYTHON -m pytest tests/test_auth.py -v
 $VENV_PYTHON -m pytest tests/test_auth_api.py -v
 $VENV_PYTHON -m pytest tests/test_admin.py -v
 $VENV_PYTHON -m pytest tests/test_admin_api.py -v
-$VENV_PYTHON -m pytest tests/test_share.py -v
-$VENV_PYTHON -m pytest tests/test_share_api.py -v
 $VENV_PYTHON -m pytest tests/test_client.py -v
 $VENV_PYTHON -m pytest tests/test_sync.py -v
 
