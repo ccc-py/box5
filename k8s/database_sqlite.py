@@ -28,6 +28,8 @@ def init_db():
     db.execute("CREATE TABLE IF NOT EXISTS api_keys (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER REFERENCES users(id), key_prefix TEXT, key_hash TEXT, name TEXT, permissions TEXT DEFAULT 'read', expires_at TEXT, created_at TEXT, revoked INTEGER DEFAULT 0)")
     db.execute("CREATE TABLE IF NOT EXISTS login_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER REFERENCES users(id), ip TEXT, user_agent TEXT, created_at TEXT)")
 
+    db.execute("CREATE TABLE IF NOT EXISTS shares (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER REFERENCES users(id), file_path TEXT NOT NULL, token TEXT UNIQUE NOT NULL, password_hash TEXT, expires_at TEXT, max_downloads INTEGER, download_count INTEGER DEFAULT 0, view_count INTEGER DEFAULT 0, created_at TEXT, revoked INTEGER DEFAULT 0)")
+
     row = db.execute("SELECT id FROM users WHERE username = ?", (DEFAULT_USER,)).fetchone()
     if row:
         db.execute("UPDATE user_profiles SET is_admin = 1 WHERE user_id = ?", (row["id"],))

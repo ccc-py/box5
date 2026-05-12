@@ -12,6 +12,7 @@ import markdown
 
 import auth
 import admin as admin_module
+import share as share_module
 from database_sqlite import get_db, init_db
 import mail as email_module
 
@@ -1087,6 +1088,153 @@ async def admin_containers_page(request: Request):
     except HTTPException:
         return RedirectResponse(url="/login")
     return templates.TemplateResponse(request=request, name="admin/containers.html")
+
+
+def get_user_id_from_request(request: Request) -> int:
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        raise HTTPException(status_code=401, detail="No token")
+    payload = auth.decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return int(payload["sub"])
+
+
+@app.post("/api/shares")
+async def api_create_share(request: Request):
+    try:
+        user_id = get_user_id_from_request(request)
+    except HTTPException as e:
+        return JSONResponse({"error": e.detail}, status_code=e.status_code)
+    try:
+        body = await request.json()
+    except:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    file_path = body.get("file_path", "")
+    password = body.get("password", "")
+    expires_hours = int(body.get("expires_hours", 0))
+    max_downloads = int(body.get("max_downloads", 0))
+
+    if not file_path:
+        return JSONResponse({"error": "file_path is required"}, status_code=400)
+
+    share_id, token = share_module.create_share(user_id, file_path, password, expires_hours, max_downloads)
+    return {"id": share_id, "token": token}
+
+
+@app.get("/api/shares")
+async def api_list_shares(request: Request):
+    try:
+        user_id = get_user_id_from_request(request)
+    except HTTPException as e:
+        return JSONResponse({"error": e.detail}, status_code=e.status_code)
+    shares = share_module.get_user_shares(user_id)
+    return shares
+
+
+@app.delete("/api/shares/{share_id}")
+async def api_revoke_share(request: Request, share_id: int):
+    try:
+        user_id = get_user_id_from_request(request)
+    except HTTPException as e:
+        return JSONResponse({"error": e.detail}, status_code=e.status_code)
+    ok = share_module.revoke_share(share_id, user_id)
+    if not ok:
+        return JSONResponse({"error": "Share not found"}, status_code=404)
+    return {"message": "Share revoked"}
+
+
+@app.get("/api/shares/{token}")
+async def api_get_share(request: Request, token: str):
+    share = share_module.get_share_by_token(token)
+    if not share:
+        return JSONResponse({"error": "Share not found"}, status_code=404)
+
+    if share_module.is_share_expired(share):
+        return JSONResponse({"error": "Share has expired"}, status_code=410)
+    if share_module.is_share_download_limit_reached(share):
+        return JSONResponse({"error": "Download limit reached"}, status_code=410)
+
+    share_module.increment_share_view(token)
+
+    return {
+        "file_path": share["file_path"],
+        "has_password": bool(share["password_hash"]),
+        "expires_at": share["expires_at"],
+        "download_count": share["download_count"],
+        "view_count": share["view_count"],
+    }
+
+
+@app.post("/api/shares/{token}/unlock")
+async def api_unlock_share(request: Request, token: str):
+    share = share_module.get_share_by_token(token)
+    if not share:
+        return JSONResponse({"error": "Share not found"}, status_code=404)
+    if share_module.is_share_expired(share):
+        return JSONResponse({"error": "Share has expired"}, status_code=410)
+
+    try:
+        body = await request.json()
+    except:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    password = body.get("password", "")
+    if not share_module.check_share_password(share, password):
+        return JSONResponse({"error": "Wrong password"}, status_code=403)
+
+    return {"unlocked": True, "file_path": share["file_path"]}
+
+
+@app.get("/api/shares/{token}/download")
+async def api_download_share(request: Request, token: str):
+    password = request.query_params.get("password", "")
+
+    share = share_module.get_share_by_token(token)
+    if not share:
+        return JSONResponse({"error": "Share not found"}, status_code=404)
+    if share_module.is_share_expired(share):
+        return JSONResponse({"error": "Share has expired"}, status_code=410)
+    if share_module.is_share_download_limit_reached(share):
+        return JSONResponse({"error": "Download limit reached"}, status_code=410)
+    if share["password_hash"] and not share_module.check_share_password(share, password):
+        return JSONResponse({"error": "Password required"}, status_code=403)
+
+    file_path = share["file_path"]
+    if not os.path.exists(file_path):
+        return JSONResponse({"error": "File not found on disk"}, status_code=404)
+
+    share_module.increment_share_download(token)
+    filename = os.path.basename(file_path)
+    return FileResponse(file_path, filename=filename)
+
+
+@app.get("/shares", response_class=HTMLResponse)
+async def my_shares_page(request: Request):
+    token = request.cookies.get("token")
+    if not token:
+        return RedirectResponse(url="/login")
+    return templates.TemplateResponse(request=request, name="shares.html")
+
+
+@app.get("/share/{token}", response_class=HTMLResponse)
+async def share_page(request: Request, token: str):
+    share = share_module.get_share_by_token(token)
+    if not share:
+        return HTMLResponse(content="<h1>Share not found</h1>", status_code=404)
+    if share_module.is_share_expired(share):
+        return HTMLResponse(content="<h1>This share link has expired</h1>", status_code=410)
+    if share_module.is_share_download_limit_reached(share):
+        return HTMLResponse(content="<h1>Download limit reached</h1>", status_code=410)
+
+    share_module.increment_share_view(token)
+    return templates.TemplateResponse(request=request, name="share.html", context={
+        "token": token,
+        "file_path": share["file_path"],
+        "has_password": bool(share["password_hash"]),
+        "expires_at": share["expires_at"],
+    })
 
 
 if __name__ == "__main__":
