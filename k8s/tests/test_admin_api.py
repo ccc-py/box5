@@ -82,7 +82,7 @@ class TestAdminUsersAPI:
     def test_admin_user_detail(self):
         client = TestClient(app)
         token = auth.create_access_token(ADMIN_USER_ID, "ccc")
-        resp = client.get("/api/admin/users/1", headers={"Authorization": f"Bearer {token}"})
+        resp = client.get(f"/api/admin/users/{ADMIN_USER_ID}", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200
         data = resp.json()
         assert "username" in data
@@ -96,7 +96,7 @@ class TestAdminUsersAPI:
     def test_admin_update_user(self):
         client = TestClient(app)
         token = auth.create_access_token(ADMIN_USER_ID, "ccc")
-        resp = client.put("/api/admin/users/1", headers={"Authorization": f"Bearer {token}"}, json={"quota_gb": 20, "is_active": 1, "is_admin": 1})
+        resp = client.put(f"/api/admin/users/{ADMIN_USER_ID}", headers={"Authorization": f"Bearer {token}"}, json={"quota_gb": 20, "is_active": 1, "is_admin": 1})
         assert resp.status_code == 200
 
     def test_admin_delete_invalid_user(self):
@@ -108,7 +108,7 @@ class TestAdminUsersAPI:
     def test_admin_reset_password(self):
         client = TestClient(app)
         token = auth.create_access_token(ADMIN_USER_ID, "ccc")
-        resp = client.post("/api/admin/users/1/reset-password", headers={"Authorization": f"Bearer {token}"}, json={"password": "newpass123"})
+        resp = client.post(f"/api/admin/users/{ADMIN_USER_ID}/reset-password", headers={"Authorization": f"Bearer {token}"}, json={"password": "newpass123"})
         assert resp.status_code == 200
 
     def test_admin_reset_password_short(self):

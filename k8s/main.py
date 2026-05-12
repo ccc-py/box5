@@ -12,11 +12,15 @@ import markdown
 
 import auth
 import admin as admin_module
+import multi as multi_mode
 from database_sqlite import get_db, init_db
 import mail as email_module
 
 DEFAULT_USER = os.getenv("DEFAULT_USER", "ccc")
 DEFAULT_PASS = os.getenv("DEFAULT_PASS", "cccpass")
+BOX5_MODE = multi_mode.MODE
+BOX5_ROOT = multi_mode.ROOT
+BOX5_SIMPLE_KEY = multi_mode.SIMPLE_KEY
 
 
 @asynccontextmanager
@@ -25,18 +29,24 @@ async def lifespan(app: FastAPI):
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     os.makedirs(CONTAINER_DIR, exist_ok=True)
 
-    user_dir = os.path.join(UPLOAD_DIR, DEFAULT_USER)
-    if not os.path.exists(user_dir):
-        print(f"Creating default user: {DEFAULT_USER}")
-        if create_user_container(DEFAULT_USER, DEFAULT_PASS):
-            token_file = os.path.join(user_dir, ".token")
-            with open(token_file, "w") as f:
-                f.write(DEFAULT_USER)
-            print(f"Default user '{DEFAULT_USER}' created successfully!")
-        else:
-            print(f"Warning: Failed to create default user container")
+    if BOX5_MODE == "simple":
+        multi_mode.init_simple_mode()
+    elif BOX5_MODE == "multi":
+        multi_mode.init_multi_mode()
     else:
-        print(f"Default user '{DEFAULT_USER}' already exists")
+        multi_mode.init_docker_mode()
+        user_dir = os.path.join(UPLOAD_DIR, DEFAULT_USER)
+        if not os.path.exists(user_dir):
+            print(f"Creating default user: {DEFAULT_USER}")
+            if create_user_container(DEFAULT_USER, DEFAULT_PASS):
+                token_file = os.path.join(user_dir, ".token")
+                with open(token_file, "w") as f:
+                    f.write(DEFAULT_USER)
+                print(f"Default user '{DEFAULT_USER}' created successfully!")
+            else:
+                print(f"Warning: Failed to create default user container")
+        else:
+            print(f"Default user '{DEFAULT_USER}' already exists")
 
     yield
 
@@ -716,6 +726,8 @@ async def container_status(request: Request):
 
 @app.get("/api/ssh/{username}")
 async def get_ssh_info(username: str):
+    if BOX5_MODE != "docker":
+        return JSONResponse({"error": "SSH only available in docker mode"}, status_code=403)
     ssh_port = get_ssh_port(username)
     return {
         "host": BASE_HOST,
@@ -723,6 +735,18 @@ async def get_ssh_info(username: str):
         "username": username,
         "command": f"ssh {username}@{BASE_HOST} -p {ssh_port}"
     }
+
+
+@app.post("/api/simple/login")
+async def api_simple_login(request: Request):
+    if BOX5_MODE == "simple":
+        if BOX5_SIMPLE_KEY:
+            incoming_key = request.headers.get("X-Simple-Key", "")
+            if incoming_key != BOX5_SIMPLE_KEY:
+                return JSONResponse({"error": "Invalid simple key"}, status_code=401)
+        token = auth.create_access_token(1, "simple")
+        return {"access_token": token}
+    return JSONResponse({"error": "Simple login only available in simple mode"}, status_code=403)
 
 
 @app.post("/api/auth/register")
@@ -899,31 +923,6 @@ async def reset_password_page(request: Request, token: str = ""):
     if not user:
         return templates.TemplateResponse(request=request, name="reset-password.html", context={"expired": True})
     return templates.TemplateResponse(request=request, name="reset-password.html", context={"token": token})
-
-
-@app.post("/reset-password")
-async def reset_password_submit(request: Request, token: str = Form(...), password: str = Form(...), confirm: str = Form(...)):
-    user = auth.get_user_by_reset_token(token)
-    if not user:
-        return templates.TemplateResponse(request=request, name="reset-password.html", context={"expired": True})
-    if password != confirm:
-        return templates.TemplateResponse(request=request, name="reset-password.html", context={"token": token, "error": "Passwords do not match"})
-    if len(password) < 6:
-        return templates.TemplateResponse(request=request, name="reset-password.html", context={"token": token, "error": "Password must be at least 6 characters"})
-
-    auth.update_user_password(user["id"], password)
-    auth.clear_reset_token(user["id"])
-
-    try:
-        import docker as docker_lib
-        container_name = f"box5-{user['username']}"
-        client = docker_lib.from_env()
-        container = client.containers.get(container_name)
-        container.exec_run(f"bash -c 'echo {user['username']}:{password} | chpasswd'")
-    except Exception as e:
-        print(f"Warning: Could not sync container password: {e}")
-
-    return templates.TemplateResponse(request=request, name="reset-password.html", context={"success": True})
 
 
 @app.post("/reset-password")
