@@ -104,6 +104,11 @@ class TestQuotaSystem:
         if USER_ID is None:
             pytest.skip("no user available")
         db = get_db()
+        row = db.execute("SELECT quota_gb, disk_usage_bytes FROM user_profiles WHERE user_id = ?", (USER_ID,)).fetchone()
+        if row is None:
+            db.execute("INSERT INTO user_profiles (user_id, quota_gb, is_admin, is_active) VALUES (?, 10, 0, 1)", (USER_ID,))
+            db.commit()
+            row = db.execute("SELECT quota_gb, disk_usage_bytes FROM user_profiles WHERE user_id = ?", (USER_ID,)).fetchone()
         db.execute("UPDATE user_profiles SET disk_usage_bytes = 0 WHERE user_id = ?", (USER_ID,))
         db.commit()
         db.close()

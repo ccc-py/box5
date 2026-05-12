@@ -749,6 +749,199 @@ async def api_simple_login(request: Request):
     return JSONResponse({"error": "Simple login only available in simple mode"}, status_code=403)
 
 
+@app.get("/api/files")
+async def api_list_files(request: Request, folder: str = ""):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    payload = None
+    if token:
+        payload = auth.decode_token(token)
+    if BOX5_MODE == "simple" and not payload:
+        payload = {"sub": "1", "username": "simple"}
+    if not payload:
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+
+    user_id = int(payload["sub"])
+    username = payload["username"]
+    if BOX5_MODE == "simple":
+        if not payload:
+            payload = {"sub": "1", "username": "simple"}
+        user_root = multi_mode.get_user_folder("simple") or BOX5_ROOT
+        base_path = user_root if user_root else UPLOAD_DIR
+    else:
+        user_root = multi_mode.get_user_folder(username) or BOX5_ROOT
+        base_path = os.path.join(user_root, "sync") if user_root else UPLOAD_DIR
+    if folder:
+        target_dir = os.path.join(base_path, folder)
+    else:
+        target_dir = base_path
+
+    if not os.path.exists(target_dir):
+        return []
+    if BOX5_MODE != "simple" and not multi_mode.check_path_allowed(target_dir, username):
+        return JSONResponse({"error": "Access denied"}, status_code=403)
+
+    files = []
+    subfolders = set()
+    for entry in os.listdir(target_dir):
+        full = os.path.join(target_dir, entry)
+        if os.path.isfile(full):
+            stat = os.stat(full)
+            is_pub = multi_mode.is_public_path(os.path.join(folder, entry)) if folder == "public" else False
+            files.append({
+                "id": 0, "user_id": user_id, "filename": entry,
+                "folder": folder, "filepath": full,
+                "size": stat.st_size,
+                "is_public": 1 if is_pub else 0,
+                "created_at": "", "updated_at": "",
+            })
+        elif os.path.isdir(full):
+            subfolders.add(entry)
+    return {"files": files, "subfolders": list(subfolders)}
+
+
+@app.post("/api/files/upload")
+async def api_upload_file(request: Request):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    payload = None
+    if token:
+        payload = auth.decode_token(token)
+    if BOX5_MODE == "simple" and not payload:
+        payload = {"sub": "1", "username": "simple"}
+    if not payload:
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+
+    username = payload["username"]
+    if BOX5_MODE == "simple":
+        user_root = multi_mode.get_user_folder("simple") or BOX5_ROOT
+        base_path = user_root if user_root else UPLOAD_DIR
+    else:
+        user_root = multi_mode.get_user_folder(username) or BOX5_ROOT
+        base_path = os.path.join(user_root, "sync") if user_root else UPLOAD_DIR
+
+    try:
+        form = await request.form()
+    except:
+        return JSONResponse({"error": "Invalid form data"}, status_code=400)
+
+    folder = form.get("folder", "")
+    target_dir = os.path.join(base_path, folder) if folder else base_path
+
+    if not multi_mode.check_path_allowed(target_dir, username):
+        return JSONResponse({"error": "Access denied"}, status_code=403)
+    os.makedirs(target_dir, exist_ok=True)
+
+    uploaded = []
+    for field in form.keys():
+        if field == "folder":
+            continue
+        file_obj = form[field]
+        if hasattr(file_obj, "filename"):
+            dest = os.path.join(target_dir, file_obj.filename)
+            if not multi_mode.check_path_allowed(dest, username):
+                continue
+            with open(dest, "wb") as f:
+                f.write(file_obj.file.read())
+            stat = os.stat(dest)
+            db = get_db()
+            cursor = db.execute(
+                "INSERT INTO files (user_id, filename, folder, filepath, size, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (int(payload["sub"]), file_obj.filename, folder, dest, stat.st_size, 0, "", "")
+            )
+            db.commit()
+            db.close()
+            uploaded.append({"id": cursor.lastrowid, "filename": file_obj.filename})
+    return {"files": uploaded}
+
+
+@app.get("/api/files/{file_id_or_path:path}")
+async def api_get_file(request: Request, file_id_or_path: str):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    payload = None
+    if token:
+        payload = auth.decode_token(token)
+    if BOX5_MODE == "simple" and not payload:
+        payload = {"sub": "1", "username": "simple"}
+    if not payload:
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+
+    username = payload["username"]
+    if BOX5_MODE == "simple":
+        user_root = multi_mode.get_user_folder("simple") or BOX5_ROOT
+        base_path = user_root if user_root else UPLOAD_DIR
+    else:
+        user_root = multi_mode.get_user_folder(username) or BOX5_ROOT
+        base_path = os.path.join(user_root, "sync") if user_root else UPLOAD_DIR
+
+    if file_id_or_path.isdigit():
+        db = get_db()
+        row = db.execute("SELECT * FROM files WHERE id = ?", (int(file_id_or_path),)).fetchone()
+        db.close()
+        if not row or row["user_id"] != int(payload["sub"]):
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        return dict(row)
+
+    file_path = os.path.join(base_path, file_id_or_path)
+    if not multi_mode.check_path_allowed(file_path, username):
+        return JSONResponse({"error": "Access denied"}, status_code=403)
+    if not os.path.exists(file_path):
+        return JSONResponse({"error": "Not found"}, status_code=404)
+
+    stat = os.stat(file_path)
+    return {
+        "filename": os.path.basename(file_path),
+        "filepath": file_path,
+        "size": stat.st_size,
+    }
+
+
+@app.delete("/api/files/{file_id}")
+async def api_delete_file(request: Request, file_id: int):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    payload = None
+    if token:
+        payload = auth.decode_token(token)
+    if BOX5_MODE == "simple" and not payload:
+        payload = {"sub": "1", "username": "simple"}
+    if not payload:
+        return JSONResponse({"error": "Authentication required"}, status_code=401)
+
+    db = get_db()
+    row = db.execute("SELECT * FROM files WHERE id = ?", (file_id,)).fetchone()
+    if not row or row["user_id"] != int(payload["sub"]):
+        db.close()
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    filepath = row["filepath"]
+    db.close()
+
+    username = payload["username"]
+    if not multi_mode.check_path_allowed(filepath, username):
+        return JSONResponse({"error": "Access denied"}, status_code=403)
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    db = get_db()
+    db.execute("DELETE FROM files WHERE id = ?", (file_id,))
+    db.commit()
+    db.close()
+    return {"message": "Deleted"}
+
+
+@app.get("/api/public/files")
+async def api_public_files():
+    if BOX5_MODE != "simple" and BOX5_MODE != "multi":
+        return JSONResponse({"error": "Public files only in simple/multi mode"}, status_code=403)
+    root = BOX5_ROOT or UPLOAD_DIR
+    public_dir = os.path.join(root, "public")
+    if not os.path.exists(public_dir):
+        return []
+    files = []
+    for entry in os.listdir(public_dir):
+        full = os.path.join(public_dir, entry)
+        if os.path.isfile(full):
+            stat = os.stat(full)
+            files.append({"filename": entry, "filepath": full, "size": stat.st_size})
+    return files
+
+
 @app.post("/api/auth/register")
 async def api_register(request: Request):
     try:
@@ -957,7 +1150,10 @@ def require_admin(request: Request):
     payload = auth.decode_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid token")
-    if not admin_module.is_admin_user(int(payload["sub"])):
+    sub = int(payload["sub"])
+    admin_ok = admin_module.is_admin_user(sub)
+    print("AAA require_admin: sub=", sub, "admin_ok=", admin_ok)
+    if not admin_ok:
         raise HTTPException(status_code=403, detail="Admin required")
     return int(payload["sub"])
 

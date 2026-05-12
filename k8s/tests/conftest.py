@@ -4,27 +4,6 @@ import sys
 import tempfile
 import shutil
 from unittest.mock import MagicMock, patch
-import docker
-
-
-_original_docker = None
-
-
-@pytest.fixture(scope="session", autouse=True)
-def mock_docker_session():
-    global _original_docker
-    _original_docker = docker.from_env
-    docker.from_env = MagicMock(return_value=MagicMock())
-    yield
-    if _original_docker is not None:
-        docker.from_env = _original_docker
-
-
-@pytest.fixture(autouse=True)
-def reset_main_client():
-    import main
-    main._client = None
-    yield
 
 
 @pytest.fixture
@@ -36,7 +15,10 @@ def temp_dir():
 
 @pytest.fixture
 def mock_docker():
-    return docker.from_env()
+    with patch('docker.from_env') as mock:
+        mock_client = MagicMock()
+        mock.return_value = mock_client
+        yield mock_client
 
 
 @pytest.fixture

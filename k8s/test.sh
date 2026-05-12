@@ -49,6 +49,7 @@ $VENV_PYTHON -m pytest tests/test_sync.py -v
 $VENV_PYTHON -m pytest tests/test_editor.py -v
 $VENV_PYTHON -m pytest tests/test_multi.py -v
 $VENV_PYTHON -m pytest tests/test_simple_sync.py -v
+$VENV_PYTHON -m pytest tests/test_multi_mode_api.py -v
 
 echo ""
 echo "=== Starting server for e2e tests ==="

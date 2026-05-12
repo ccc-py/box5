@@ -30,6 +30,7 @@ def init_db():
 
     row = db.execute("SELECT id FROM users WHERE username = ?", (DEFAULT_USER,)).fetchone()
     if row:
+        db.execute("INSERT OR IGNORE INTO user_profiles (user_id, is_admin, is_active) VALUES (?, 1, 1)", (row["id"],))
         db.execute("UPDATE user_profiles SET is_admin = 1 WHERE user_id = ?", (row["id"],))
 
     db.commit()
