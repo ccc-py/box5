@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y \
     sqlite3 \
     zsh \
     vim \
+    openssh-server \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv
@@ -24,10 +26,17 @@ WORKDIR /tmp/box5/Server
 
 COPY database_sqlite.py /tmp/box5/Server/database.py
 
+RUN mkdir -p /var/run/sshd && \
+    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config || true
+
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
 ENV PORT=3111
 ENV PYTHONPATH=/tmp/box5
 ENV DB_PATH=/data/uploads/ccc/box5.db
 
-EXPOSE 3111
+EXPOSE 3111 22
 
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3111"]
+CMD ["/start.sh"]

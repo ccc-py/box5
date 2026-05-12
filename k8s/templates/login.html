@@ -61,6 +61,9 @@
     <div class="login-container">
         <h1>{% if register %}Register{% else %}Login{% endif %} - box5</h1>
         <form method="post" action="{% if register %}/register{% else %}/login{% endif %}">
+            {% if register %}
+            <input type="email" name="email" placeholder="Email (optional)">
+            {% endif %}
             <input type="text" name="username" placeholder="Username" required>
             <input type="password" name="password" placeholder="Password" required>
             <button type="submit">{% if register %}Register{% else %}Login{% endif %}</button>
@@ -69,6 +72,7 @@
             {% if register %}
             Already have an account? <a href="/login">Login</a>
             {% else %}
+            <a href="/forgot-password">Forgot password?</a><br>
             Don't have an account? <a href="/register">Register</a>
             {% endif %}
         </div>

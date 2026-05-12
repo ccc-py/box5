@@ -34,11 +34,16 @@ fi
 
 echo ""
 echo "=== Running unit tests ==="
-python3 -m pytest tests/test_main.py -v
+VENV_PYTHON="$HOME/.venv/bin/python"
+[ ! -f "$VENV_PYTHON" ] && VENV_PYTHON="python3"
+
+$VENV_PYTHON -m pytest tests/test_main.py -v
+$VENV_PYTHON -m pytest tests/test_auth.py -v
+$VENV_PYTHON -m pytest tests/test_auth_api.py -v
 
 echo ""
 echo "=== Starting server for e2e tests ==="
-python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 &
+$VENV_PYTHON -m uvicorn main:app --host 0.0.0.0 --port 8000 &
 SERVER_PID=$!
 sleep 3
 
@@ -51,7 +56,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "=== Running e2e tests ==="
-python3 -m pytest tests/e2e_test.py -v
+$VENV_PYTHON -m pytest tests/e2e_test.py -v
 
 echo ""
 echo "=== Testing Docker integration (login with container) ==="

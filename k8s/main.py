@@ -3,13 +3,16 @@ import sys
 import docker
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import requests
 import markdown
 
+import auth
+from database_sqlite import get_db, init_db
+import mail as email_module
 
 DEFAULT_USER = os.getenv("DEFAULT_USER", "ccc")
 DEFAULT_PASS = os.getenv("DEFAULT_PASS", "cccpass")
@@ -17,6 +20,7 @@ DEFAULT_PASS = os.getenv("DEFAULT_PASS", "cccpass")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_db()
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     os.makedirs(CONTAINER_DIR, exist_ok=True)
 
@@ -48,6 +52,8 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 SERVER_PORT = 3111
+SSH_PORT = 22
+BASE_SSH_PORT = int(os.getenv("BOX5_SSH_BASE_PORT", "22000"))
 BASE_HOST = os.getenv("BOX5_HOST", "localhost")
 CONTAINER_IMAGE = os.getenv("BOX5_IMAGE", "box5-server:latest")
 
@@ -64,6 +70,54 @@ def get_client():
 def get_container_name(username: str) -> str:
     """根據使用者名稱產生對應的 Docker 容器名稱"""
     return f"box5-{username}"
+
+
+def create_user_in_container(container, username: str, password: str) -> bool:
+    """在容器內建立系統使用者（SSH 用）"""
+    try:
+        result = container.exec_run(f"useradd -m -s /bin/zsh {username}")
+        if result.exit_code != 0:
+            output = result.output.decode() if result.output else ""
+            print(f"useradd warning: {output}")
+
+        result = container.exec_run(f"echo '{username}:{password}' | chpasswd")
+        if result.exit_code != 0:
+            output = result.output.decode() if result.output else ""
+            print(f"chpasswd failed: {output}")
+            return False
+
+        result = container.exec_run(f"grep '^{username}:' /etc/shadow")
+        output = result.output.decode() if result.output else ""
+        if result.exit_code == 0:
+            shadow_line = output.strip()
+            if ':' in shadow_line:
+                fields = shadow_line.split(':')
+                pw_field = fields[1] if len(fields) > 1 else ""
+                if pw_field == "!" or pw_field == "*" or not pw_field:
+                    print(f"Password not set properly (pw_field: {pw_field}), retrying...")
+                    result = container.exec_run(f"bash -c 'echo {username}:{password} | chpasswd'")
+                    if result.exit_code != 0:
+                        return False
+
+        return True
+    except Exception as e:
+        print(f"Error creating user in container: {e}")
+        return False
+
+
+def get_ssh_port(username: str) -> int:
+    """根據 username 計算 SSH 埠號"""
+    user_dir = os.path.join(UPLOAD_DIR, username)
+    ssh_port_file = os.path.join(user_dir, ".ssh_port")
+    if os.path.exists(ssh_port_file):
+        try:
+            with open(ssh_port_file, "r") as f:
+                port = f.read().strip()
+                if port:
+                    return int(port)
+        except:
+            pass
+    return BASE_SSH_PORT + (sum(ord(c) for c in username) % 10000)
 
 
 def get_user_port(username: str) -> int:
@@ -121,7 +175,10 @@ def create_user_container(username: str, password: str) -> bool:
             CONTAINER_IMAGE,
             name=container_name,
             detach=True,
-            ports={f"{SERVER_PORT}/tcp": None},
+            ports={
+                f"{SERVER_PORT}/tcp": None,
+                f"{SSH_PORT}/tcp": None,
+            },
             environment=env_vars,
             volumes={
                 os.path.abspath(UPLOAD_DIR): {"bind": "/data/uploads", "mode": "rw"},
@@ -178,13 +235,42 @@ def create_user_container(username: str, password: str) -> bool:
             f.write(str(user_port))
         print(f"Saved port {user_port} to {port_file}")
 
+        ssh_port_mapping = container.ports.get(f"{SSH_PORT}/tcp")
+        if ssh_port_mapping:
+            ssh_port = int(ssh_port_mapping[0]["HostPort"])
+            ssh_port_file = os.path.join(user_dir, ".ssh_port")
+            with open(ssh_port_file, "w") as f:
+                f.write(str(ssh_port))
+            print(f"Saved SSH port {ssh_port} to {ssh_port_file}")
+        else:
+            print("Warning: No SSH port mapping found")
+            ssh_port = get_ssh_port(username)
+
+        if not create_user_in_container(container, username, password):
+            print("Warning: Failed to create SSH user in container")
+
+        for i in range(10):
+            try:
+                import socket
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2)
+                result = sock.connect_ex(("localhost", ssh_port))
+                sock.close()
+                if result == 0:
+                    print(f"SSH ready on port {ssh_port}")
+                    break
+                time.sleep(1)
+            except Exception as e:
+                print(f"Waiting for SSH... attempt {i+1}")
+                time.sleep(1)
+
         import shutil
         sync_src = os.path.join(CONTAINER_DIR, username, "sync")
         sync_dest = os.path.join(user_dir, "sync")
         if os.path.exists(sync_src) and not os.path.exists(sync_dest):
             shutil.copytree(sync_src, sync_dest)
             print(f"Copied sync folder to user directory")
-        
+
         return True
     except Exception as e:
         import traceback
@@ -625,6 +711,218 @@ async def container_status(request: Request):
     if not username:
         return {"status": "not_logged_in"}
     return {"status": check_container_status(username), "username": username}
+
+
+@app.get("/api/ssh/{username}")
+async def get_ssh_info(username: str):
+    ssh_port = get_ssh_port(username)
+    return {
+        "host": BASE_HOST,
+        "port": ssh_port,
+        "username": username,
+        "command": f"ssh {username}@{BASE_HOST} -p {ssh_port}"
+    }
+
+
+@app.post("/api/auth/register")
+async def api_register(request: Request):
+    try:
+        body = await request.json()
+    except:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+    username = body.get("username", "").strip()
+    password = body.get("password", "")
+    email = body.get("email", "").strip()
+
+    if not username or len(username) < 3:
+        return JSONResponse({"error": "Username must be at least 3 characters"}, status_code=400)
+    if not password or len(password) < 6:
+        return JSONResponse({"error": "Password must be at least 6 characters"}, status_code=400)
+
+    try:
+        user_id = auth.create_user(username, password, email)
+    except Exception as e:
+        print(f"Register error: {e}")
+        return JSONResponse({"error": "Registration failed"}, status_code=500)
+    if not user_id:
+        return JSONResponse({"error": "Username already exists"}, status_code=400)
+
+    if email and email_module:
+        token = auth.create_verify_token()
+        db = get_db()
+        db.execute("UPDATE user_profiles SET verify_token = ? WHERE user_id = ?", (token, user_id))
+        db.commit()
+        db.close()
+        email_module.send_verification_email(email, username, token)
+
+    return {"message": "User registered", "user_id": user_id}
+
+
+@app.post("/api/auth/login")
+async def api_login(request: Request, username: str = Form(...), password: str = Form(...)):
+    user = auth.get_user_by_username(username)
+    if not user or not auth.verify_password(password, user["password_hash"]):
+        return HTMLResponse(content="<h1>Invalid credentials</h1><a href='/login'>Try again</a>", status_code=401)
+
+    import socket
+    client_ip = socket.gethostname()
+    auth.record_login(user["id"], client_ip, "")
+
+    token = auth.create_access_token(user["id"], user["username"])
+    response = RedirectResponse(url="/", status_code=302)
+    response.set_cookie(key="token", value=token)
+    response.set_cookie(key="username", value=user["username"])
+    return response
+
+
+@app.get("/api/auth/me")
+async def api_me(request: Request):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        return JSONResponse({"error": "No token"}, status_code=401)
+    payload = auth.decode_token(token)
+    if not payload:
+        return JSONResponse({"error": "Invalid token"}, status_code=401)
+    user = auth.get_user_by_id(int(payload["sub"]))
+    if not user:
+        return JSONResponse({"error": "User not found"}, status_code=404)
+    profile = auth.get_user_profile(user["id"])
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "created_at": user["created_at"],
+        "email": profile.get("email") if profile else None,
+        "email_verified": profile.get("email_verified", 0) if profile else 0,
+    }
+
+
+@app.get("/api/auth/login-history")
+async def api_login_history(request: Request):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        return JSONResponse({"error": "No token"}, status_code=401)
+    payload = auth.decode_token(token)
+    if not payload:
+        return JSONResponse({"error": "Invalid token"}, status_code=401)
+    history = auth.get_login_history(int(payload["sub"]))
+    return history
+
+
+@app.post("/api/keys")
+async def api_create_key(request: Request):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        return JSONResponse({"error": "No token"}, status_code=401)
+    payload = auth.decode_token(token)
+    if not payload:
+        return JSONResponse({"error": "Invalid token"}, status_code=401)
+
+    try:
+        body = await request.json()
+    except:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    name = body.get("name", "My API Key")
+    permissions = body.get("permissions", "read")
+    if permissions not in ("read", "write", "admin"):
+        permissions = "read"
+    expires_at = body.get("expires_at", "")
+
+    raw_key, key_id = auth.create_api_key(int(payload["sub"]), name, permissions, expires_at)
+    return {"id": key_id, "key": raw_key, "name": name, "permissions": permissions}
+
+
+@app.get("/api/keys")
+async def api_list_keys(request: Request):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        return JSONResponse({"error": "No token"}, status_code=401)
+    payload = auth.decode_token(token)
+    if not payload:
+        return JSONResponse({"error": "Invalid token"}, status_code=401)
+    keys = auth.get_api_keys(int(payload["sub"]))
+    return keys
+
+
+@app.delete("/api/keys/{key_id}")
+async def api_revoke_key(request: Request, key_id: int):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        return JSONResponse({"error": "No token"}, status_code=401)
+    payload = auth.decode_token(token)
+    if not payload:
+        return JSONResponse({"error": "Invalid token"}, status_code=401)
+    auth.revoke_api_key(key_id, int(payload["sub"]))
+    return {"message": "Key revoked"}
+
+
+@app.get("/verify-email")
+async def verify_email_page(request: Request, token: str = ""):
+    if not token:
+        return templates.TemplateResponse(request=request, name="verify-email.html", context={"success": False, "message": "No token provided"})
+    db = get_db()
+    row = db.execute("SELECT user_id FROM user_profiles WHERE verify_token = ?", (token,)).fetchone()
+    if not row:
+        db.close()
+        return templates.TemplateResponse(request=request, name="verify-email.html", context={"success": False, "message": "Invalid token"})
+    auth.verify_user_email(row["user_id"])
+    db.close()
+    return templates.TemplateResponse(request=request, name="verify-email.html", context={"success": True})
+
+
+@app.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_password_page(request: Request):
+    return templates.TemplateResponse(request=request, name="forgot-password.html")
+
+
+@app.post("/forgot-password")
+async def forgot_password_submit(request: Request, email: str = Form(...), username: str = Form(...)):
+    db = get_db()
+    row = db.execute(
+        "SELECT u.id FROM users u JOIN user_profiles up ON u.id = up.user_id WHERE u.username = ? AND up.email = ?",
+        (username, email)
+    ).fetchone()
+    db.close()
+    if not row:
+        return templates.TemplateResponse(request=request, name="forgot-password.html", context={"error": "User not found"})
+    token = auth.set_reset_token(row["id"])
+    email_module.send_password_reset_email(email, username, token)
+    return templates.TemplateResponse(request=request, name="forgot-password.html", context={"sent": True})
+
+
+@app.get("/reset-password", response_class=HTMLResponse)
+async def reset_password_page(request: Request, token: str = ""):
+    if not token:
+        return templates.TemplateResponse(request=request, name="reset-password.html", context={"expired": True})
+    user = auth.get_user_by_reset_token(token)
+    if not user:
+        return templates.TemplateResponse(request=request, name="reset-password.html", context={"expired": True})
+    return templates.TemplateResponse(request=request, name="reset-password.html", context={"token": token})
+
+
+@app.post("/reset-password")
+async def reset_password_submit(request: Request, token: str = Form(...), password: str = Form(...), confirm: str = Form(...)):
+    user = auth.get_user_by_reset_token(token)
+    if not user:
+        return templates.TemplateResponse(request=request, name="reset-password.html", context={"expired": True})
+    if password != confirm:
+        return templates.TemplateResponse(request=request, name="reset-password.html", context={"token": token, "error": "Passwords do not match"})
+    if len(password) < 6:
+        return templates.TemplateResponse(request=request, name="reset-password.html", context={"token": token, "error": "Password must be at least 6 characters"})
+
+    auth.update_user_password(user["id"], password)
+    auth.clear_reset_token(user["id"])
+
+    try:
+        import docker as docker_lib
+        container_name = f"box5-{user['username']}"
+        client = docker_lib.from_env()
+        container = client.containers.get(container_name)
+        container.exec_run(f"bash -c 'echo {user['username']}:{password} | chpasswd'")
+    except Exception as e:
+        print(f"Warning: Could not sync container password: {e}")
+
+    return templates.TemplateResponse(request=request, name="reset-password.html", context={"success": True})
 
 
 if __name__ == "__main__":

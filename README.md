@@ -18,6 +18,16 @@ cd k8s
 ```
 - Web UI: http://localhost:8000
 
+### Start K8s with SSH Access (box5-k8s)
+```bash
+cd k8s
+./ccc_server.sh
+```
+- Web UI: http://localhost:8000
+- SSH: `ssh ccc@localhost -p XXXXX` (port shown in output)
+- SCP: `scp -P XXXXX file.txt ccc@localhost:/tmp/`
+- Default: `ccc` / `cccpass`
+
 ### Manual Start (box5)
 ```bash
 # Server (port 3111)

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Email - box5</title>
+    <style>
+        body { font-family: system-ui; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .container { text-align: center; padding: 2rem; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% if success %}
+        <h1 class="success">Email Verified!</h1>
+        <p>Your email has been verified successfully.</p>
+        <p><a href="/">Go to Dashboard</a></p>
+        {% else %}
+        <h1 class="error">Verification Failed</h1>
+        <p>{{ message }}</p>
+        <p><a href="/login">Go to Login</a></p>
+        {% endif %}
+    </div>
+</body>
+</html>
